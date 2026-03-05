@@ -1,0 +1,5 @@
+{
+  "name": "Photoshop Script Generator",
+  "description": "A user-friendly tool to build custom Adobe Photoshop scripts for batch processing images. Define a sequence of actions like resizing and saving, and this app will generate the corresponding JavaScript code using the Gemini API.",
+  "requestFramePermissions": []
+}
