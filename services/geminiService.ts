@@ -2,7 +2,18 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeUnit, SaveFormat, ResizeMode, RotationType, ColorProfile, ConditionAction, ConditionProperty, ConditionOperator, Condition, SaveConfig, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+let _ai: GoogleGenAI | null = null;
+
+function getAI(): GoogleGenAI {
+  if (!_ai) {
+    const apiKey = process.env.API_KEY as string;
+    if (!apiKey) {
+      throw new Error("API-nøgle mangler. Opret en .env.local fil med: GEMINI_API_KEY=din_nøgle_her");
+    }
+    _ai = new GoogleGenAI({ apiKey });
+  }
+  return _ai;
+}
 
 // --- Prompt Generation Functions ---
 
@@ -472,7 +483,7 @@ ${buildScriptCleanupSection()}
   console.log("Generated Prompt for Gemini:", fullPrompt);
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: 'gemini-2.5-pro',
       contents: fullPrompt,
     });
@@ -704,7 +715,7 @@ export async function parseScriptToActions(scriptContent: string): Promise<{ out
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: 'gemini-2.5-pro',
       contents: prompt,
       config: {
