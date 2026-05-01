@@ -20,7 +20,7 @@ export type AppAction =
   | { type: 'ADD_ACTION'; payload: { action: Action, parentId?: string } }
   | { type: 'UPDATE_ACTION'; payload: { id: string, action: Action } }
   | { type: 'DELETE_ACTION'; payload: string }
-  | { type: 'MOVE_ACTION'; payload: { draggedId: string, targetId: string } }
+  | { type: 'MOVE_ACTION'; payload: { draggedId: string, targetId: string, position: 'before' | 'after' | 'inside' } }
   | { type: 'SET_ACTIONS'; payload: Action[] }
   | { type: 'SET_OUTPUT_FOLDER_NAME'; payload: string }
   | { type: 'SET_GENERATED_SCRIPT'; payload: string }
@@ -98,49 +98,36 @@ const findAndRemoveAction = (actions: Action[], id: string): { found: Action | n
     return { found, updatedActions };
 };
 
-const insertActionRecursively = (
+const insertActionAt = (
   actions: Action[],
   draggedAction: Action,
   targetId: string,
+  position: 'before' | 'after' | 'inside',
 ): { newActions: Action[]; inserted: boolean } => {
-  // First, check for the target at the current level of the action list.
   for (let i = 0; i < actions.length; i++) {
     const action = actions[i];
+
     if (action.id === targetId) {
       const newActions = [...actions];
-      
-      // If the target is a container, drop the action inside it.
-      if (isContainerAction(action)) {
-        const updatedContainer = {
-          ...action,
-          then: [...action.then, draggedAction],
-        };
-        newActions.splice(i, 1, updatedContainer);
+      if (position === 'inside' && isContainerAction(action)) {
+        newActions[i] = { ...action, then: [...action.then, draggedAction] } as Action;
+      } else if (position === 'after') {
+        newActions.splice(i + 1, 0, draggedAction);
       } else {
-        // Otherwise, insert the dragged action before the target item.
         newActions.splice(i, 0, draggedAction);
       }
       return { newActions, inserted: true };
     }
-  }
 
-  // If the target wasn't found, recursively search inside any container actions at this level.
-  for (let i = 0; i < actions.length; i++) {
-    const action = actions[i];
     if (isContainerAction(action)) {
-      const result = insertActionRecursively(action.then, draggedAction, targetId);
-      
-      // If the action was inserted successfully into a nested container, update this level's state.
+      const result = insertActionAt(action.then, draggedAction, targetId, position);
       if (result.inserted) {
         const newActions = [...actions];
-        const updatedContainer = { ...action, then: result.newActions };
-        newActions.splice(i, 1, updatedContainer);
+        newActions[i] = { ...action, then: result.newActions } as Action;
         return { newActions, inserted: true };
       }
     }
   }
-
-  // If the target ID was not found anywhere in the tree, return with no changes.
   return { newActions: actions, inserted: false };
 };
 
@@ -188,38 +175,23 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         error: '',
       };
     case 'MOVE_ACTION': {
-        const { draggedId, targetId } = action.payload;
-        if (draggedId === targetId) {
-            return state;
-        }
+        const { draggedId, targetId, position } = action.payload;
+        if (draggedId === targetId) return state;
 
-        // --- Bug Fix: Prevent dropping a parent container onto one of its own children ---
+        // Prevent dropping a parent container onto one of its own descendants
         const draggedAction = findActionById(state.actions, draggedId);
-        // If the dragged item is a container, check if the target is one of its descendants.
         if (draggedAction && isContainerAction(draggedAction)) {
-            const targetIsDescendant = findActionById(draggedAction.then, targetId);
-            if (targetIsDescendant) {
-                return state; // Invalid move, so we do nothing.
-            }
+            if (findActionById(draggedAction.then, targetId)) return state;
         }
-        // --- End of Bug Fix ---
 
         const { found: foundDraggedAction, updatedActions: actionsWithoutDragged } = findAndRemoveAction(state.actions, draggedId);
-        
-        if (!foundDraggedAction) {
-            return state;
-        }
+        if (!foundDraggedAction) return state;
 
-        const { newActions, inserted } = insertActionRecursively(actionsWithoutDragged, foundDraggedAction, targetId);
-        
-        if (!inserted) {
-            // If not inserted (e.g., trying to drop on itself after removal), add it back to the end
-            return { ...state, actions: [...newActions, foundDraggedAction] };
-        }
-        
+        const { newActions, inserted } = insertActionAt(actionsWithoutDragged, foundDraggedAction, targetId, position);
+
         return {
             ...state,
-            actions: newActions,
+            actions: inserted ? newActions : [...newActions, foundDraggedAction],
             generatedScript: '',
             error: '',
         };

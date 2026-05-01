@@ -1,5 +1,5 @@
 
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ConditionAction, TrimAction } from './types';
 import { generateScriptPrompt, parseScriptToActions } from './services/geminiService';
 import Header from './components/Header';
@@ -30,7 +30,8 @@ const App: React.FC = () => {
   
   // Drag and drop state
   const dragItem = useRef<Action | null>(null);
-  const dragOverItem = useRef<Action | null>(null);
+  const dropTarget = useRef<{ id: string; position: 'before' | 'after' | 'inside' } | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<{ id: string; position: 'before' | 'after' | 'inside' } | null>(null);
 
   // Import file refs
   const importScriptRef = useRef<HTMLInputElement>(null);
@@ -79,14 +80,65 @@ const App: React.FC = () => {
     }
   }, [actions, outputFolderName, dispatch]);
 
-  const handleDrop = useCallback(() => {
-    if (!dragItem.current || !dragOverItem.current || dragItem.current.id === dragOverItem.current.id) {
-        return;
+  const isDescendant = useCallback((ancestor: Action, targetId: string): boolean => {
+    if (ancestor.type === ActionType.CONDITION || ancestor.type === ActionType.CREATE_FOLDER || ancestor.type === ActionType.TRIM) {
+      for (const child of ancestor.then) {
+        if (child.id === targetId || isDescendant(child, targetId)) return true;
+      }
     }
-    dispatch({ type: 'MOVE_ACTION', payload: { draggedId: dragItem.current.id, targetId: dragOverItem.current.id } });
+    return false;
+  }, []);
+
+  const handleDragStart = useCallback((action: Action) => {
+    dragItem.current = action;
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>, action: Action) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragItem.current || dragItem.current.id === action.id) return;
+    if (isDescendant(dragItem.current, action.id)) return;
+
+    const isContainer = action.type === ActionType.CONDITION || action.type === ActionType.CREATE_FOLDER || action.type === ActionType.TRIM;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relY = (e.clientY - rect.top) / rect.height;
+
+    let position: 'before' | 'after' | 'inside';
+    if (isContainer) {
+      if (relY < 0.3) position = 'before';
+      else if (relY > 0.7) position = 'after';
+      else position = 'inside';
+    } else {
+      position = relY < 0.5 ? 'before' : 'after';
+    }
+
+    const next = { id: action.id, position };
+    if (dropTarget.current?.id !== next.id || dropTarget.current?.position !== next.position) {
+      dropTarget.current = next;
+      setDropIndicator(next);
+    }
+  }, [isDescendant]);
+
+  const handleDropZoneOver = useCallback((e: React.DragEvent<HTMLDivElement>, containerId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragItem.current) return;
+    const next = { id: containerId, position: 'inside' as const };
+    if (dropTarget.current?.id !== next.id || dropTarget.current?.position !== next.position) {
+      dropTarget.current = next;
+      setDropIndicator(next);
+    }
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    const dragged = dragItem.current;
+    const target = dropTarget.current;
     dragItem.current = null;
-    dragOverItem.current = null;
-}, [dispatch]);
+    dropTarget.current = null;
+    setDropIndicator(null);
+    if (!dragged || !target || dragged.id === target.id) return;
+    dispatch({ type: 'MOVE_ACTION', payload: { draggedId: dragged.id, targetId: target.id, position: target.position } });
+  }, [dispatch]);
 
 
   const handleDownloadScript = () => {
@@ -163,21 +215,25 @@ const App: React.FC = () => {
   const currentAction = modal.editingId ? findActionById(actions, modal.editingId) : undefined;
   
   const renderActions = (actionList: Action[], level = 0) => {
-    return actionList.map((action) => (
-      <ActionStep
-        key={action.id}
-        action={action}
-        onEdit={() => handleEditAction(action.id)}
-        onDelete={() => handleDeleteAction(action.id)}
-        onDragStart={() => (dragItem.current = action)}
-        onDragEnter={() => (dragOverItem.current = action)}
-        onDragEnd={handleDrop}
-        level={level}
-      >
-        {(action.type === ActionType.CONDITION || action.type === ActionType.CREATE_FOLDER || action.type === ActionType.TRIM) && action.then && 
-            renderActions(action.then, level + 1)}
-      </ActionStep>
-    ));
+    return actionList.map((action) => {
+      const isContainer = action.type === ActionType.CONDITION || action.type === ActionType.CREATE_FOLDER || action.type === ActionType.TRIM;
+      return (
+        <ActionStep
+          key={action.id}
+          action={action}
+          onEdit={() => handleEditAction(action.id)}
+          onDelete={() => handleDeleteAction(action.id)}
+          onDragStart={() => handleDragStart(action)}
+          onDragOver={(e) => handleDragOver(e, action)}
+          onDropZoneOver={isContainer ? (e) => handleDropZoneOver(e, action.id) : undefined}
+          onDragEnd={handleDragEnd}
+          dropIndicator={dropIndicator?.id === action.id ? dropIndicator.position : null}
+          level={level}
+        >
+          {isContainer && action.then && renderActions(action.then, level + 1)}
+        </ActionStep>
+      );
+    });
   };
 
 

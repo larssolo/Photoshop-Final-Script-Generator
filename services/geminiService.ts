@@ -2,12 +2,25 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeUnit, SaveFormat, ResizeMode, RotationType, ColorProfile, ConditionAction, ConditionProperty, ConditionOperator, Condition, SaveConfig, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+let _ai: GoogleGenAI | null = null;
+
+function getAI(): GoogleGenAI {
+  if (!_ai) {
+    const apiKey = process.env.API_KEY as string;
+    if (!apiKey) {
+      throw new Error("API-nøgle mangler. Opret en .env.local fil med: GEMINI_API_KEY=din_nøgle_her");
+    }
+    _ai = new GoogleGenAI({ apiKey });
+  }
+  return _ai;
+}
 
 // --- Prompt Generation Functions ---
 
 const buildScriptPreamble = () => `
-Generate a comprehensive and robust Adobe Photoshop script using JavaScript (ExtendScript).
+Generate a comprehensive and robust Adobe Photoshop script using JavaScript (ExtendScript),
+targeting Photoshop 2022-2025 (v23-v26+). The script must use modern ExtendScript API patterns
+that are fully compatible with the latest versions of Photoshop.
 `;
 
 const buildBestPracticesSection = () => `
@@ -20,6 +33,11 @@ const buildBestPracticesSection = () => `
 //     - Set 'app.preferences.rulerUnits = Units.PIXELS;' for consistency.
 //     - The 'finally' block MUST restore the original preferences. This is critical for leaving Photoshop in its original state.
 // 3.  **Avoid Undefined Constants**: Do NOT use constants like 'PNGFormat', 'JPEGFormat', or 'TIFFFormat'. These are NOT defined in standard ExtendScript. Do not try to assign a 'format' property to SaveOptions objects.
+// 4.  **Saving Files (PS 2022+ Required)**: ALL calls to 'doc.saveAs()' MUST use the full 4-argument signature:
+//     'doc.saveAs(saveFile, saveOptions, true, Extension.LOWERCASE);'
+//     The third argument 'asCopy = true' and fourth argument 'Extension.LOWERCASE' are MANDATORY for
+//     Photoshop 2021+ (v22+). Without these, Photoshop may display a save dialog or alter the document's
+//     saved state, even when 'DialogModes.NO' is set. NEVER call 'doc.saveAs(file, options)' with only 2 arguments.
 `;
 
 const buildCoreLogicSection = (outputFolderName: string) => `
@@ -58,6 +76,8 @@ win.show();
 win.active = true; // Ensure window is active to receive updates
 
 // The script MUST update 'progressBar.value' and 'statusText.text' inside the file processing loop.
+// After each update inside the loop, call BOTH 'win.update()' AND 'app.refresh()' for real-time
+// rendering in Photoshop 2023+ (v24+). Using only 'win.update()' is insufficient in newer versions.
 // After the loop, the script MUST call 'win.close()'.
 `;
 
@@ -67,7 +87,8 @@ const buildFileLoopSection = (actionSteps: string) => `
 // 1. **Update Progress Bar**: Update the dynamic text ("Processing file [i+1] of [total]...") and the progress bar value. Redraw the window if needed.
 //    statusText.text = "Processing (" + (i + 1) + "/" + files.length + "): " + file.name;
 //    progressBar.value = (i + 1) / files.length * 100;
-//    win.update(); // Use update() for real-time refresh
+//    win.update();    // ScriptUI refresh
+//    app.refresh();   // Required in Photoshop 2023+ (v24+) for real-time UI updates
 // 2. **Process File**: Use the following robust 'try...catch...finally' structure for each file:
 //
 // var doc = null;
@@ -200,7 +221,13 @@ function buildResizeDescription(action: ResizeAction, outputFolderName: string, 
     desc += `Set the resolution to ${resolution} DPI. `;
   }
   
-  desc += 'Use the "Automatic" resampling method. The script must call it like this: `doc.resizeImage(newWidth, newHeight, resolution, ResampleMethod.AUTOMATIC)`. CRITICAL: Do NOT provide a fifth argument to `resizeImage`. ';
+  desc += 'For the resampling method, use the best option for Photoshop 2024+ (v25+): ' +
+    'If the new dimensions are LARGER than the original (upscaling), use `ResampleMethod.PRESERVE_DETAILS_2`. ' +
+    'If the new dimensions are SMALLER than the original (downscaling), use `ResampleMethod.BICUBIC_SHARPER`. ' +
+    'If it cannot be determined whether upscaling or downscaling will occur at runtime (e.g. percentage resize), ' +
+    'compare dimensions at runtime and branch accordingly. ' +
+    'The script must call it like this: `doc.resizeImage(newWidth, newHeight, resolution, resampleMethod)`. ' +
+    'CRITICAL: Do NOT provide a fifth argument to `resizeImage`. ';
 
   if (saveLogic === SaveLogic.CONDITIONAL && conditionalSaveConfig) {
       desc += 'After resizing, perform a conditional save based on the document color mode. Generate an if/else block for this logic.\n';
@@ -274,17 +301,20 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
       desc += `Use PNG-24 format. `;
 
       if (pngTransparency) {
-          desc += `Save with transparency ENABLED. 
-          CRITICAL: To preserve transparency, DO NOT use 'doc.flatten()' because it replaces transparent areas with a white background. 
+          desc += `Save with transparency ENABLED.
+          CRITICAL: To preserve transparency, DO NOT use 'doc.flatten()' because it replaces transparent areas with a white background.
           Instead, use this process:
           1. Duplicate the active document.
-          2. Check if there is more than one layer: \`if (doc.layers.length > 1) { doc.mergeVisibleLayers(); }\`. This prevents errors if the document has only one layer.
-          3. CRITICAL: Ensure the resulting single layer is NOT a 'Background' layer (which does not support transparency). Execute: \`if (doc.activeLayer.isBackgroundLayer) { doc.activeLayer.isBackgroundLayer = false; }\`.
-          4. Save the duplicate using PNGSaveOptions with 'transparency = true'.
-          5. Close the duplicate without saving changes.`;
+          2. Check if there is more than one layer: \`if (dupDoc.layers.length > 1) { dupDoc.mergeVisibleLayers(); }\`. This prevents errors if the document has only one layer.
+          3. CRITICAL: Ensure the resulting single layer is NOT a 'Background' layer (which does not support transparency). In Photoshop 2024+ this setter can fail, so it MUST be wrapped in try-catch: \`try { if (dupDoc.activeLayer.isBackgroundLayer) { dupDoc.activeLayer.isBackgroundLayer = false; } } catch(e) {}\`.
+          4. Create PNGSaveOptions. Set \`pngSaveOptions.transparency = true\` and explicitly set \`pngSaveOptions.interlaced = false\` (required for Photoshop 2023+ compatibility).
+          5. Save the duplicate using: \`dupDoc.saveAs(saveFile, pngSaveOptions, true, Extension.LOWERCASE);\`
+          6. Close the duplicate without saving changes.`;
       } else {
           desc += 'Save with transparency disabled. ';
-          desc += `Because PNGs do not support layers, the image must be flattened. ${DUPLICATE_FLATTEN_SAVE_CLOSE}`;
+          desc += `Because PNGs do not support layers, the image must be flattened. ${DUPLICATE_FLATTEN_SAVE_CLOSE} `;
+          desc += 'When creating PNGSaveOptions, explicitly set `pngSaveOptions.interlaced = false` (required for Photoshop 2023+ compatibility). ';
+          desc += 'Save using: `dupDoc.saveAs(saveFile, pngSaveOptions, true, Extension.LOWERCASE);`';
       }
       break;
     case SaveFormat.TIFF:
@@ -315,13 +345,11 @@ This logic is for CMYK files ONLY.
 
 **PATH 2: \`else\` (for all other color modes like RGB)**
 This logic is for non-CMYK files.
-*   **Procedure:**
-    *   If layers should be flattened (\`${flattenTiff}\`):
-        1. Duplicate the document.
-        2. ${flattenInstruction}
-        3. Save the duplicate.
-        4. Close the duplicate.
-    *   If layers should be preserved (\`${!flattenTiff}\`), you can save the active document directly.
+*   **Procedure:** ALWAYS use the duplicate-save-close pattern. NEVER save the active document directly in Photoshop 2022+ as this can trigger an unwanted save dialog.
+    1. Duplicate the document.
+    2. ${flattenInstruction}
+    3. Save the duplicate using: \`dupDoc.saveAs(saveFile, tiffSaveOptions, true, Extension.LOWERCASE);\`
+    4. Close the duplicate without saving changes.
 *   **Save Options:** Create a \`TiffSaveOptions\` object and set the base properties.
     *   ${transparencyOpt}
     *   If layers should be preserved (\`${!flattenTiff}\`) AND the document has more than one layer, set \`tiffSaveOptions.layers = true;\`.
@@ -331,9 +359,15 @@ This logic is for non-CMYK files.
     case SaveFormat.PSD:
       desc += 'Save as a standard PSD file. ';
       if (psdTiffLayers) {
-        desc += 'The layers of the document must be preserved. The script should save the file with layers enabled.';
+        desc += `The layers of the document must be preserved. Use this process:
+          1. Duplicate the active document.
+          2. Create a \`PhotoshopSaveOptions\` object and set \`psdSaveOptions.layers = true;\`.
+          3. Save the duplicate using: \`dupDoc.saveAs(saveFile, psdSaveOptions, true, Extension.LOWERCASE);\`
+          4. Close the duplicate without saving changes.
+          IMPORTANT: NEVER save the active document directly in Photoshop 2022+, always use the duplicate-and-asCopy approach.`;
       } else {
-        desc += `The image must be flattened before saving. ${DUPLICATE_FLATTEN_SAVE_CLOSE}`;
+        desc += `The image must be flattened before saving. ${DUPLICATE_FLATTEN_SAVE_CLOSE} `;
+        desc += 'Save the duplicate using: `dupDoc.saveAs(saveFile, psdSaveOptions, true, Extension.LOWERCASE);`';
       }
       break;
   }
@@ -449,7 +483,7 @@ ${buildScriptCleanupSection()}
   console.log("Generated Prompt for Gemini:", fullPrompt);
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: 'gemini-2.5-pro',
       contents: fullPrompt,
     });
@@ -681,7 +715,7 @@ export async function parseScriptToActions(scriptContent: string): Promise<{ out
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: 'gemini-2.5-pro',
       contents: prompt,
       config: {
