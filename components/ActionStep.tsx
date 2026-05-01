@@ -8,8 +8,10 @@ interface ActionStepProps {
   onEdit: () => void;
   onDelete: () => void;
   onDragStart: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDragEnter: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDropZoneOver?: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragEnd: (e: React.DragEvent<HTMLDivElement>) => void;
+  dropIndicator: 'before' | 'after' | 'inside' | null;
   level: number;
   children?: React.ReactNode;
 }
@@ -175,13 +177,15 @@ const getActionDetails = (action: Action): { title: string; description: string;
   }
 };
 
-const ActionStep: React.FC<ActionStepProps> = ({ 
-  action, 
-  onEdit, 
-  onDelete, 
-  onDragStart, 
-  onDragEnter, 
+const ActionStep: React.FC<ActionStepProps> = ({
+  action,
+  onEdit,
+  onDelete,
+  onDragStart,
+  onDragOver,
+  onDropZoneOver,
   onDragEnd,
+  dropIndicator,
   level,
   children
 }) => {
@@ -189,75 +193,87 @@ const ActionStep: React.FC<ActionStepProps> = ({
   const { title, description, icon } = getActionDetails(action);
 
   const isContainer = action.type === ActionType.CONDITION || action.type === ActionType.CREATE_FOLDER || action.type === ActionType.TRIM;
-  
+
   const baseClasses = `bg-brand-gray-700 rounded-lg p-3 flex flex-col transition-all duration-200 border cursor-grab active:cursor-grabbing`;
-  const stateClasses = isContainer 
-    ? "border-brand-gray-600 cursor-pointer" 
-    : "border-transparent hover:border-brand-blue";
+  const stateClasses = isContainer
+    ? `border-brand-gray-600 cursor-pointer ${dropIndicator === 'inside' ? 'border-brand-blue bg-brand-blue/10' : ''}`
+    : `border-transparent hover:border-brand-blue ${dropIndicator === 'inside' ? 'border-brand-blue' : ''}`;
 
   return (
-    <div 
-        style={{ marginLeft: level > 0 ? `${level * 2}rem` : '0' }}
-        className="relative"
+    <div
+      style={{ marginLeft: level > 0 ? `${level * 2}rem` : '0' }}
+      className="relative"
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
     >
-       {level > 0 && (
-          <>
-            {/* Horizontal line connecting to vertical */}
-            <div className="absolute top-6 -left-4 w-4 h-px bg-brand-gray-600"></div>
-            {/* Vertical line from parent */}
-            <div className="absolute -top-2 -left-4 h-[calc(50%)] w-px bg-brand-gray-600 connector-line-top"></div>
-            <div className="absolute top-6 -left-4 h-[calc(100%-1.5rem)] w-px bg-brand-gray-600 connector-line-bottom"></div>
-          </>
-        )}
-        <div 
-            className="flex flex-col"
-            onDragStart={onDragStart}
-            onDragEnter={onDragEnter}
-            onDragEnd={onDragEnd}
-            onDragOver={(e) => e.preventDefault()}
-            draggable
+      {/* Drop indicator: BEFORE */}
+      {dropIndicator === 'before' && (
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-brand-blue rounded-full z-20 pointer-events-none" />
+      )}
+
+      {level > 0 && (
+        <>
+          <div className="absolute top-6 -left-4 w-4 h-px bg-brand-gray-600" />
+          <div className="absolute -top-2 -left-4 h-[calc(50%)] w-px bg-brand-gray-600" />
+          <div className="absolute top-6 -left-4 h-[calc(100%-1.5rem)] w-px bg-brand-gray-600" />
+        </>
+      )}
+
+      <div className="flex flex-col">
+        {/* Header — drag target for position detection */}
+        <div
+          className={`${baseClasses} ${stateClasses}`}
+          onDragOver={onDragOver}
+          onClick={isContainer ? () => setIsExpanded(!isExpanded) : undefined}
         >
-            <div 
-                className={`${baseClasses} ${stateClasses}`}
-                onClick={isContainer ? () => setIsExpanded(!isExpanded) : undefined}
-            >
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 flex-grow min-w-0">
-                        <DragHandleIcon className="w-5 h-5 text-brand-gray-400 flex-shrink-0" />
-                        <div className="flex-shrink-0 w-8 h-8 bg-brand-gray-800 rounded-lg flex items-center justify-center">
-                        {icon}
-                        </div>
-                        <div className="min-w-0 flex-grow">
-                            <p className="font-bold text-white truncate">{title}</p>
-                            <p className="text-sm text-brand-gray-300 truncate">{description}</p>
-                        </div>
-                        {isContainer && (
-                            <ChevronDownIcon className={`w-5 h-5 text-brand-gray-400 flex-shrink-0 ml-2 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
-                        )}
-                    </div>
-                    <div className="flex items-center gap-1 pl-2">
-                        <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-2 rounded-full hover:bg-brand-gray-600 transition-colors">
-                            <EditIcon className="w-5 h-5 text-brand-gray-300" />
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-2 rounded-full hover:bg-brand-gray-600 transition-colors">
-                            <TrashIcon className="w-5 h-5 text-red-500" />
-                        </button>
-                    </div>
-                </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 flex-grow min-w-0">
+              <DragHandleIcon className="w-5 h-5 text-brand-gray-400 flex-shrink-0" />
+              <div className="flex-shrink-0 w-8 h-8 bg-brand-gray-800 rounded-lg flex items-center justify-center">
+                {icon}
+              </div>
+              <div className="min-w-0 flex-grow">
+                <p className="font-bold text-white truncate">{title}</p>
+                <p className="text-sm text-brand-gray-300 truncate">{description}</p>
+              </div>
+              {isContainer && (
+                <ChevronDownIcon className={`w-5 h-5 text-brand-gray-400 flex-shrink-0 ml-2 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
+              )}
             </div>
-            {isContainer && (
-                <div className={`transition-[grid-template-rows] duration-300 ease-in-out grid ${isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                    <div className="overflow-hidden">
-                        <div className="pt-2 flex flex-col gap-2">
-                            {children}
-                            <div className="text-xs text-center text-brand-gray-500 border border-dashed border-brand-gray-600 rounded-md py-3 bg-brand-gray-800/50" style={{ marginLeft: `${(level + 1) * 2}rem`}}>
-                                Drop actions here to add to this container
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <div className="flex items-center gap-1 pl-2">
+              <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-2 rounded-full hover:bg-brand-gray-600 transition-colors">
+                <EditIcon className="w-5 h-5 text-brand-gray-300" />
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-2 rounded-full hover:bg-brand-gray-600 transition-colors">
+                <TrashIcon className="w-5 h-5 text-red-500" />
+              </button>
+            </div>
+          </div>
         </div>
+
+        {isContainer && (
+          <div className={`transition-[grid-template-rows] duration-300 ease-in-out grid ${isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+            <div className="overflow-hidden">
+              <div className="pt-2 flex flex-col gap-2">
+                {children}
+                <div
+                  className={`text-xs text-center border border-dashed rounded-md py-3 transition-colors ${dropIndicator === 'inside' ? 'border-brand-blue text-brand-blue bg-brand-blue/5' : 'border-brand-gray-600 text-brand-gray-500 bg-brand-gray-800/50'}`}
+                  style={{ marginLeft: `${(level + 1) * 2}rem` }}
+                  onDragOver={onDropZoneOver}
+                >
+                  Drop actions here to add to this container
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Drop indicator: AFTER */}
+      {dropIndicator === 'after' && (
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-blue rounded-full z-20 pointer-events-none" />
+      )}
     </div>
   );
 };
