@@ -1,6 +1,6 @@
 
 import React, { useCallback, useRef, useState } from 'react';
-import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ConditionAction, TrimAction } from './types';
+import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ConditionAction, TrimAction, FlattenAction } from './types';
 import { generateScriptPrompt, parseScriptToActions } from './services/geminiService';
 import Header from './components/Header';
 import ActionStep from './components/ActionStep';
@@ -13,7 +13,7 @@ import ConditionModal from './components/modals/ConditionModal';
 import TrimModal from './components/modals/TrimModal';
 import CodeBlock from './components/CodeBlock';
 import UserGuide from './components/UserGuide';
-import { PlusIcon, SparklesIcon, DownloadIcon, BranchIcon, ScissorsIcon } from './components/icons/Icons';
+import { PlusIcon, SparklesIcon, DownloadIcon, BranchIcon, ScissorsIcon, FlattenIcon } from './components/icons/Icons';
 import { useAppState, useAppDispatch } from './state/AppContext';
 
 const App: React.FC = () => {
@@ -327,11 +327,20 @@ const App: React.FC = () => {
               >
                 <PlusIcon /> Color Mode
               </button>
-               <button 
+               <button
                 onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'condition' })}
-                className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 col-span-2 lg:col-span-3"
+                className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
               >
                 <BranchIcon /> Condition
+              </button>
+               <button
+                onClick={() => {
+                  const flattenAction: FlattenAction = { id: '', type: ActionType.FLATTEN, config: {} };
+                  dispatch({ type: 'ADD_ACTION', payload: { action: flattenAction } });
+                }}
+                className="flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
+              >
+                <FlattenIcon /> Flatten
               </button>
             </div>
             

@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeUnit, SaveFormat, ResizeMode, RotationType, ColorProfile, ConditionAction, ConditionProperty, ConditionOperator, Condition, SaveConfig, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn } from '../types';
+import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeUnit, SaveFormat, ResizeMode, RotationType, ColorProfile, ConditionAction, ConditionProperty, ConditionOperator, Condition, SaveConfig, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn, FlattenAction } from '../types';
 
 let _ai: GoogleGenAI | null = null;
 
@@ -196,6 +196,9 @@ function buildColorModeDescription(action: ColorModeAction): string {
   return `Convert the document's color profile to ${profile}. For example, for CMYK, use 'app.activeDocument.changeMode(ChangeMode.CMYK)'. IMPORTANT: If the conversion requires flattening the image, the script must proceed with flattening automatically to complete the conversion.`;
 }
 
+function buildFlattenDescription(_action: FlattenAction): string {
+  return `Flatten the image by calling 'app.activeDocument.flatten()'. This merges all layers into a single background layer, discarding any hidden layers. This operation modifies the document directly (it is not performed on a duplicate).`;
+}
 
 function buildResizeDescription(action: ResizeAction, outputFolderName: string, parentPath: string = ''): string {
   const { mode, width, height, length, unit, maintainAspectRatio, resolution, saveConfig, saveLogic, conditionalSaveConfig } = action.config;
@@ -458,6 +461,9 @@ function buildPromptFromActions(actions: Action[], outputFolderName: string, par
         const thenPromptCondition = buildPromptFromActions(conditionAction.then, outputFolderName, parentPath, level + 1);
         stepDescription += `**CONDITION**: Construct an 'if (${conditionString}) { ... }' block. Inside this block, execute the following nested steps:\n${thenPromptCondition}`;
         break;
+      case ActionType.FLATTEN:
+        stepDescription += `**FLATTEN Action**: ${buildFlattenDescription(action as FlattenAction)}`;
+        break;
       default:
         stepDescription += 'Unknown action.';
     }
@@ -705,6 +711,7 @@ export async function parseScriptToActions(scriptContent: string): Promise<{ out
         *   For TIFF/PSD saves, check for layer preservation (\`psdTiffLayers: true\`) vs. flattening (\`psdTiffLayers: false\`).
         *   For "ROTATE", convert angles like \`90\` to \`CW_90\` and \`-90\` to \`CCW_90\`.
         *   For "TRIM", identify checks for \`doc.trim(...)\`. Map the parameters to "basedOn" (TrimType), "top", "bottom", "left", and "right".
+        *   For "FLATTEN", identify calls to \`doc.flatten()\` or \`app.activeDocument.flatten()\`. This action has no config parameters.
     6.  **Conflict Handling**: For any save operation, determine the filename conflict strategy. Look for checks like \`File(path).exists\`. If it's followed by a \`prompt()\` dialog, set \`"conflictResolution": "PROMPT"\`. If it's followed by a loop that appends an incrementing suffix (e.g., "_1", "_2"), set \`"conflictResolution": "APPEND_SUFFIX"\`. If there is no existence check and the file is saved directly, assume \`"conflictResolution": "OVERWRITE"\`.
     7.  **JSON Output**: Construct the JSON object based on your findings. The structure, including nesting for conditions and folders, must exactly match the schema. Do not include any extra text or explanations.
 

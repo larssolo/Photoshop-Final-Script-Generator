@@ -7,6 +7,7 @@ export enum ActionType {
   COLOR_MODE = 'COLOR_MODE',
   CONDITION = 'CONDITION',
   TRIM = 'TRIM',
+  FLATTEN = 'FLATTEN',
 }
 
 export enum ResizeUnit {
@@ -166,7 +167,13 @@ export interface ConditionAction {
 }
 
 
-export type Action = ResizeAction | SaveAction | CreateFolderAction | RotateAction | ColorModeAction | ConditionAction | TrimAction;
+export interface FlattenAction {
+  id: string;
+  type: ActionType.FLATTEN;
+  config: Record<string, never>;
+}
+
+export type Action = ResizeAction | SaveAction | CreateFolderAction | RotateAction | ColorModeAction | ConditionAction | TrimAction | FlattenAction;
 
 export interface Preset {
   name: string;

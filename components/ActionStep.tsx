@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeMode, RotationType, ConditionAction, ConditionProperty, ConditionOperator, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn } from '../types';
-import { EditIcon, TrashIcon, ResizeIcon, SaveIcon, FolderIcon, DragHandleIcon, RotateIcon, ColorSwatchIcon, BranchIcon, ChevronDownIcon, ScissorsIcon } from './icons/Icons';
+import { EditIcon, TrashIcon, ResizeIcon, SaveIcon, FolderIcon, DragHandleIcon, RotateIcon, ColorSwatchIcon, BranchIcon, ChevronDownIcon, ScissorsIcon, FlattenIcon } from './icons/Icons';
 
 interface ActionStepProps {
   action: Action;
@@ -166,6 +166,12 @@ const getActionDetails = (action: Action): { title: string; description: string;
         icon: <BranchIcon className="w-5 h-5 text-teal-400" />
       };
     }
+    case ActionType.FLATTEN:
+      return {
+        title: 'Flatten Image',
+        description: 'Merges all layers into a single background layer',
+        icon: <FlattenIcon className="w-5 h-5 text-cyan-400" />
+      };
     default:
       return { title: 'Unknown Action', description: 'Action not recognized', icon: null };
   }
@@ -239,9 +245,11 @@ const ActionStep: React.FC<ActionStepProps> = ({
               )}
             </div>
             <div className="flex items-center gap-1 pl-2">
-              <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-2 rounded-full hover:bg-brand-gray-600 transition-colors">
-                <EditIcon className="w-5 h-5 text-brand-gray-300" />
-              </button>
+              {action.type !== ActionType.FLATTEN && (
+                <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-2 rounded-full hover:bg-brand-gray-600 transition-colors">
+                  <EditIcon className="w-5 h-5 text-brand-gray-300" />
+                </button>
+              )}
               <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-2 rounded-full hover:bg-brand-gray-600 transition-colors">
                 <TrashIcon className="w-5 h-5 text-red-500" />
               </button>
