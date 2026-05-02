@@ -9,7 +9,9 @@ interface ActionStepProps {
   onDelete: () => void;
   onDragStart: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   onDropZoneOver?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDropZoneDrop?: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragEnd: (e: React.DragEvent<HTMLDivElement>) => void;
   dropIndicator: 'before' | 'after' | 'inside' | null;
   level: number;
@@ -33,8 +35,8 @@ const getConditionText = (condition: ConditionAction['config']['condition']): st
         [ConditionOperator.IS_NOT]: 'is not',
     };
 
-    const value = (propMap[condition.property] === 'Width' || propMap[condition.property] === 'Height') 
-        ? `${condition.value}px` 
+    const value = (propMap[condition.property] === 'Width' || propMap[condition.property] === 'Height')
+        ? `${condition.value}px`
         : `"${condition.value}"`;
 
     return `If ${propMap[condition.property]} ${opMap[condition.operator]} ${value}`;
@@ -55,9 +57,9 @@ const getActionDetails = (action: Action): { title: string; description: string;
 
       const hasSave = !!config.saveConfig || (config.saveLogic === SaveLogic.CONDITIONAL && (!!config.conditionalSaveConfig?.onRGB || !!config.conditionalSaveConfig?.onCMYK));
       const title = hasSave ? 'Resize & Save' : 'Resize Image';
-      
+
       let description = parts.length > 0 ? parts.join(', ') : "Configure resize details";
-      
+
       if (config.saveLogic === SaveLogic.CONDITIONAL) {
           description += ' | Save: Conditional (RGB/CMYK)';
       } else if (config.saveConfig) {
@@ -109,38 +111,32 @@ const getActionDetails = (action: Action): { title: string; description: string;
     }
     case ActionType.CREATE_FOLDER: {
       const config = (action as CreateFolderAction).config;
-      return { 
-        title: 'Create Folder', 
-        description: `Folder Name: "${config.folderName}"`, 
-        icon: <FolderIcon className="w-5 h-5 text-purple-400" /> 
+      return {
+        title: 'Create Folder',
+        description: `Folder Name: "${config.folderName}"`,
+        icon: <FolderIcon className="w-5 h-5 text-purple-400" />
       };
     }
     case ActionType.ROTATE: {
       const config = (action as RotateAction).config;
       let rotationText = '';
       switch (config.rotation) {
-        case RotationType.CW_90:
-          rotationText = '90° Clockwise';
-          break;
-        case RotationType.CCW_90:
-          rotationText = '90° Counter-Clockwise';
-          break;
-        case RotationType.DEG_180:
-          rotationText = '180°';
-          break;
+        case RotationType.CW_90: rotationText = '90° Clockwise'; break;
+        case RotationType.CCW_90: rotationText = '90° Counter-Clockwise'; break;
+        case RotationType.DEG_180: rotationText = '180°'; break;
       }
-      return { 
-        title: 'Rotate Image', 
-        description: `Rotation: ${rotationText}`, 
-        icon: <RotateIcon className="w-5 h-5 text-yellow-500" /> 
+      return {
+        title: 'Rotate Image',
+        description: `Rotation: ${rotationText}`,
+        icon: <RotateIcon className="w-5 h-5 text-yellow-500" />
       };
     }
     case ActionType.COLOR_MODE: {
       const config = (action as ColorModeAction).config;
-      return { 
-        title: 'Convert Color Mode', 
-        description: `Target Profile: ${config.profile}`, 
-        icon: <ColorSwatchIcon className="w-5 h-5 text-pink-500" /> 
+      return {
+        title: 'Convert Color Mode',
+        description: `Target Profile: ${config.profile}`,
+        icon: <ColorSwatchIcon className="w-5 h-5 text-pink-500" />
       };
     }
     case ActionType.TRIM: {
@@ -155,9 +151,7 @@ const getActionDetails = (action: Action): { title: string; description: string;
         if (config.bottom) sides.push('Bottom');
         if (config.left) sides.push('Left');
         if (config.right) sides.push('Right');
-
         const sidesText = sides.length > 0 ? `(${sides.join(', ')})` : '(None)';
-
         return {
             title: 'Trim Image',
             description: `Based on: ${basedOnMap[config.basedOn]} ${sidesText}`,
@@ -170,7 +164,7 @@ const getActionDetails = (action: Action): { title: string; description: string;
         title: 'Condition (If...Then)',
         description: getConditionText(config.condition),
         icon: <BranchIcon className="w-5 h-5 text-teal-400" />
-      }
+      };
     }
     default:
       return { title: 'Unknown Action', description: 'Action not recognized', icon: null };
@@ -183,7 +177,9 @@ const ActionStep: React.FC<ActionStepProps> = ({
   onDelete,
   onDragStart,
   onDragOver,
+  onDrop,
   onDropZoneOver,
+  onDropZoneDrop,
   onDragEnd,
   dropIndicator,
   level,
@@ -194,18 +190,15 @@ const ActionStep: React.FC<ActionStepProps> = ({
 
   const isContainer = action.type === ActionType.CONDITION || action.type === ActionType.CREATE_FOLDER || action.type === ActionType.TRIM;
 
-  const baseClasses = `bg-brand-gray-700 rounded-lg p-3 flex flex-col transition-all duration-200 border cursor-grab active:cursor-grabbing`;
-  const stateClasses = isContainer
-    ? `border-brand-gray-600 cursor-pointer ${dropIndicator === 'inside' ? 'border-brand-blue bg-brand-blue/10' : ''}`
-    : `border-transparent hover:border-brand-blue ${dropIndicator === 'inside' ? 'border-brand-blue' : ''}`;
+  const headerBase = `bg-brand-gray-700 rounded-lg p-3 flex flex-col transition-all duration-200 border select-none cursor-grab active:cursor-grabbing`;
+  const headerState = isContainer
+    ? `border-brand-gray-600 ${dropIndicator === 'inside' ? 'border-brand-blue bg-brand-blue/10' : ''}`
+    : `border-transparent hover:border-brand-blue`;
 
   return (
     <div
       style={{ marginLeft: level > 0 ? `${level * 2}rem` : '0' }}
       className="relative"
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
     >
       {/* Drop indicator: BEFORE */}
       {dropIndicator === 'before' && (
@@ -221,10 +214,14 @@ const ActionStep: React.FC<ActionStepProps> = ({
       )}
 
       <div className="flex flex-col">
-        {/* Header — drag target for position detection */}
+        {/* Header: drag source AND drop target */}
         <div
-          className={`${baseClasses} ${stateClasses}`}
+          className={`${headerBase} ${headerState}`}
+          draggable
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
           onDragOver={onDragOver}
+          onDrop={onDrop}
           onClick={isContainer ? () => setIsExpanded(!isExpanded) : undefined}
         >
           <div className="flex items-center justify-between">
@@ -261,6 +258,7 @@ const ActionStep: React.FC<ActionStepProps> = ({
                   className={`text-xs text-center border border-dashed rounded-md py-3 transition-colors ${dropIndicator === 'inside' ? 'border-brand-blue text-brand-blue bg-brand-blue/5' : 'border-brand-gray-600 text-brand-gray-500 bg-brand-gray-800/50'}`}
                   style={{ marginLeft: `${(level + 1) * 2}rem` }}
                   onDragOver={onDropZoneOver}
+                  onDrop={onDropZoneDrop}
                 >
                   Drop actions here to add to this container
                 </div>
