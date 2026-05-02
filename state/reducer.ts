@@ -58,7 +58,12 @@ const addActionRecursively = (actions: Action[], newAction: Action, parentId?: s
 const updateActionRecursively = (actions: Action[], id: string, updatedAction: Action): Action[] => {
   return actions.map(action => {
     if (action.id === id) {
-      return { ...updatedAction, id: action.id, then: (action as any).then ?? (updatedAction as any).then }; // Preserve ID and children
+      const withId = { ...updatedAction, id: action.id };
+      // Preserve existing children when updating a container action
+      if (isContainerAction(withId)) {
+        withId.then = (action as ContainerAction).then ?? (updatedAction as ContainerAction).then ?? [];
+      }
+      return withId as Action;
     }
     if (isContainerAction(action)) {
       return { ...action, then: updateActionRecursively(action.then, id, updatedAction) };

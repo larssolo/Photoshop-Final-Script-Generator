@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeMode, RotationType, ConditionAction, ConditionProperty, ConditionOperator, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn, MetadataAction } from '../types';
+import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeMode, RotationType, ConditionAction, ConditionProperty, ConditionOperator, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn, FlattenAction, MetadataAction } from '../types';
 import { EditIcon, TrashIcon, ResizeIcon, SaveIcon, FolderIcon, DragHandleIcon, RotateIcon, ColorSwatchIcon, BranchIcon, ChevronDownIcon, ScissorsIcon, FlattenIcon, MetadataIcon } from './icons/Icons';
 
 interface ActionStepProps {
@@ -167,7 +167,7 @@ const getActionDetails = (action: Action): { title: string; description: string;
       };
     }
     case ActionType.FLATTEN: {
-      const preserveTransparency = (action as import('../types').FlattenAction).config.preserveTransparency;
+      const preserveTransparency = (action as FlattenAction).config.preserveTransparency;
       return {
         title: 'Flatten Image',
         description: preserveTransparency ? 'Merge Visible Layers (transparency preserved)' : 'Flatten (transparency filled with background)',

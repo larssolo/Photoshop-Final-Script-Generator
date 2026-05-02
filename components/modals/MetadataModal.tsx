@@ -65,8 +65,12 @@ const MetadataModal: React.FC<MetadataModalProps> = ({ isOpen, onClose, onSave, 
 
   if (!isOpen) return null;
 
+  const exampleOriginal = stripNumericPrefix
+    ? `${'0'.repeat(numericPrefixLength)} - Product_photo`
+    : 'Product_photo';
+
   const filenamePreview = (() => {
-    let name = `${'0'.repeat(numericPrefixLength)} - Produkt_foto`;
+    let name = exampleOriginal;
     if (stripNumericPrefix) name = name.replace(new RegExp(`^\\d{${numericPrefixLength}}\\s*-\\s*`), '');
     if (addPrefix) name = addPrefix + name;
     if (addSuffix) name = name + addSuffix;
@@ -207,7 +211,7 @@ const MetadataModal: React.FC<MetadataModalProps> = ({ isOpen, onClose, onSave, 
                 <div className="rounded-xl border border-brand-gray-700 bg-brand-gray-900 px-4 py-3">
                   <p className="text-xs text-brand-gray-500 mb-1">Preview</p>
                   <p className="text-xs text-brand-gray-400 font-mono">
-                    <span className="text-brand-gray-600">{`${'0'.repeat(numericPrefixLength)} - Produkt_foto.jpg`}</span>
+                    <span className="text-brand-gray-600">{exampleOriginal + '.jpg'}</span>
                     <span className="mx-2 text-brand-gray-600">→</span>
                     <span className="text-green-400">{filenamePreview}</span>
                   </p>
