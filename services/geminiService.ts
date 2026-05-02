@@ -8,7 +8,7 @@ function getAI(): GoogleGenAI {
   if (!_ai) {
     const apiKey = process.env.API_KEY as string;
     if (!apiKey) {
-      throw new Error("API-nøgle mangler. Opret en .env.local fil med: GEMINI_API_KEY=din_nøgle_her");
+      throw new Error("API key missing. Create a .env.local file with: GEMINI_API_KEY=your_key_here");
     }
     _ai = new GoogleGenAI({ apiKey });
   }

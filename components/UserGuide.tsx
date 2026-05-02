@@ -10,55 +10,55 @@ const UserGuide: React.FC = () => {
       icon: <ResizeIcon className="w-4 h-4 text-blue-400" />,
       color: 'bg-blue-500/10 border-blue-500/20',
       name: 'Resize',
-      desc: 'Skaler billedet til faste mål (bredde × højde), en procent, eller så den længste kant passer. Vælg DPI og om aspektforholdet skal bevares.',
+      desc: 'Scale the image to fixed dimensions (width × height), a percentage, or so the longest edge fits a given size. Set DPI and choose whether to maintain the aspect ratio.',
     },
     {
       icon: <SaveIcon className="w-4 h-4 text-green-400" />,
       color: 'bg-green-500/10 border-green-500/20',
       name: 'Save',
-      desc: 'Gem billedet som JPEG, PNG, TIFF eller PSD. Sæt kvalitet, transparens, komprimering og tilføj evt. suffiks eller undermappe til outputstien.',
+      desc: 'Export the image as JPEG, PNG, TIFF, or PSD. Configure quality, transparency, compression, and optionally add a filename suffix or subfolder to the output path.',
     },
     {
       icon: <FolderIcon className="w-4 h-4 text-purple-400" />,
       color: 'bg-purple-500/10 border-purple-500/20',
       name: 'Folder',
-      desc: 'Opret en undermappe i outputmappen. Handlinger placeret inde i mappen gemmer automatisk dertil — nyttigt til at opdele output i kategorier.',
+      desc: 'Create a subfolder inside the output folder. Actions placed inside the folder step automatically save there — useful for splitting output into categories.',
     },
     {
       icon: <RotateIcon className="w-4 h-4 text-yellow-400" />,
       color: 'bg-yellow-500/10 border-yellow-500/20',
       name: 'Rotate',
-      desc: 'Roter billedet 90° med uret, 90° mod uret eller 180°.',
+      desc: 'Rotate the image 90° clockwise, 90° counter-clockwise, or 180°.',
     },
     {
       icon: <ScissorsIcon className="w-4 h-4 text-orange-400" />,
       color: 'bg-orange-500/10 border-orange-500/20',
       name: 'Trim',
-      desc: 'Beskær automatisk kanter baseret på transparens eller baggrundsfarve. Vælg hvilke sider (top, bund, venstre, højre) der trimmes. Handlinger indeni opererer på det trimmede billede — originalens kanter gendannes bagefter.',
+      desc: 'Automatically crop edges based on transparency or background colour. Choose which sides (top, bottom, left, right) to trim. Actions placed inside operate on the trimmed image — the original edges are restored afterwards.',
     },
     {
       icon: <ColorSwatchIcon className="w-4 h-4 text-pink-400" />,
       color: 'bg-pink-500/10 border-pink-500/20',
       name: 'Color Mode',
-      desc: 'Konverter billedets farverum til RGB, CMYK eller Gråtone. Bruges typisk inden gem til et format med specifikke krav (fx CMYK til tryk).',
+      desc: 'Convert the colour space to RGB, CMYK, or Grayscale. Typically used before saving to a format with specific requirements, e.g. CMYK for print.',
     },
     {
       icon: <BranchIcon className="w-4 h-4 text-teal-400" />,
       color: 'bg-teal-500/10 border-teal-500/20',
       name: 'Condition',
-      desc: 'Tilføj betinget logik (if/then). Handlinger indeni udføres kun hvis betingelsen er opfyldt — fx "kun hvis bredde > 2000px" eller "kun hvis filnavn indeholder \'web\'".',
+      desc: 'Add conditional logic (if/then). Actions placed inside only run when the condition is met — e.g. "only if width > 2000 px" or "only if filename contains \'web\'".',
     },
     {
       icon: <FlattenIcon className="w-4 h-4 text-cyan-400" />,
       color: 'bg-cyan-500/10 border-cyan-500/20',
       name: 'Flatten',
-      desc: 'Flet alle lag til ét. Vælg mellem fuld flatten (transparens fyldes med baggrundfarve) eller Merge Visible Layers (bevarer transparens).',
+      desc: 'Merge all layers into one. Choose between a full flatten (transparent areas filled with the background colour) or Merge Visible Layers (transparency preserved).',
     },
     {
       icon: <MetadataIcon className="w-4 h-4 text-violet-400" />,
       color: 'bg-violet-500/10 border-violet-500/20',
       name: 'Metadata & Rename',
-      desc: 'Opdater billedets metadata (titel, forfatter, copyright, beskrivelse, keywords) og omdøb outputfilen — fx fjern et numerisk præfiks ("123456 - "), tilføj præfiks eller suffiks.',
+      desc: 'Update image metadata (title, author, copyright, description, keywords) and rename the output file — e.g. strip a numeric prefix ("123456 - "), add a prefix, or add a suffix.',
     },
   ];
 
@@ -108,13 +108,13 @@ const UserGuide: React.FC = () => {
         </div>
       </div>
 
-      {/* Divider + toggle */}
+      {/* Divider + collapsible action overview */}
       <div className="mt-8 border-t border-brand-gray-700 pt-6">
         <button
           onClick={() => setShowActions(v => !v)}
           className="w-full flex items-center justify-between text-left group"
         >
-          <span className="text-sm font-semibold text-brand-gray-300 group-hover:text-white transition-colors">Overblik over handlinger</span>
+          <span className="text-sm font-semibold text-brand-gray-300 group-hover:text-white transition-colors">Action overview</span>
           <svg
             xmlns="http://www.w3.org/2000/svg"
             fill="none"

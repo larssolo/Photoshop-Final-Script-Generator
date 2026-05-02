@@ -182,7 +182,7 @@ const MetadataModal: React.FC<MetadataModalProps> = ({ isOpen, onClose, onSave, 
                     type="text"
                     value={addPrefix}
                     onChange={e => setAddPrefix(e.target.value)}
-                    placeholder='e.g. "2025_" → 2025_Produkt_foto.jpg'
+                    placeholder='e.g. "2025_" → 2025_Product_photo.jpg'
                     className="w-full bg-brand-gray-800 border border-brand-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-brand-gray-500 focus:outline-none focus:border-violet-500 transition-colors"
                   />
                 </div>

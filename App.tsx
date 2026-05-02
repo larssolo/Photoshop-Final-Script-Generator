@@ -388,6 +388,15 @@ const App: React.FC = () => {
         </div>
       </main>
 
+      <footer className="border-t border-brand-gray-700 mt-8 py-5 text-center">
+        <p className="text-sm text-brand-gray-500">
+          Built in collaboration with{' '}
+          <a href="https://claude.ai" target="_blank" rel="noopener noreferrer" className="hover:text-brand-gray-300 transition-colors underline underline-offset-2">Claude.ai</a>
+          {' '}and{' '}
+          <a href="https://www.larssohl.dk" target="_blank" rel="noopener noreferrer" className="hover:text-brand-gray-300 transition-colors underline underline-offset-2">www.larssohl.dk</a>
+        </p>
+      </footer>
+
       {modal.type === 'resize' && (
         <ResizeModal 
           isOpen={true} 
