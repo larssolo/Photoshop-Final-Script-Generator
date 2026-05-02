@@ -1,6 +1,6 @@
 
 import React, { useCallback, useRef, useState } from 'react';
-import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ConditionAction, TrimAction, FlattenAction } from './types';
+import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ConditionAction, TrimAction, FlattenAction, MetadataAction } from './types';
 import { generateScriptPrompt, parseScriptToActions } from './services/geminiService';
 import Header from './components/Header';
 import ActionStep from './components/ActionStep';
@@ -12,9 +12,10 @@ import ColorModeModal from './components/modals/ColorModeModal';
 import ConditionModal from './components/modals/ConditionModal';
 import TrimModal from './components/modals/TrimModal';
 import FlattenModal from './components/modals/FlattenModal';
+import MetadataModal from './components/modals/MetadataModal';
 import CodeBlock from './components/CodeBlock';
 import UserGuide from './components/UserGuide';
-import { PlusIcon, SparklesIcon, DownloadIcon, BranchIcon, ScissorsIcon, FlattenIcon } from './components/icons/Icons';
+import { PlusIcon, SparklesIcon, DownloadIcon, BranchIcon, ScissorsIcon, FlattenIcon, MetadataIcon } from './components/icons/Icons';
 import { useAppState, useAppDispatch } from './state/AppContext';
 
 const App: React.FC = () => {
@@ -340,6 +341,12 @@ const App: React.FC = () => {
               >
                 <FlattenIcon /> Flatten
               </button>
+               <button
+                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'metadata' })}
+                className="flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 col-span-2 lg:col-span-3"
+              >
+                <MetadataIcon /> Metadata &amp; Rename
+              </button>
             </div>
             
             <div className="mt-8 border-t border-brand-gray-700 pt-6">
@@ -443,6 +450,14 @@ const App: React.FC = () => {
           onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
           onSave={handleAddAction}
           existingAction={currentAction as FlattenAction | undefined}
+        />
+      )}
+      {modal.type === 'metadata' && (
+        <MetadataModal
+          isOpen={true}
+          onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
+          onSave={handleAddAction}
+          existingAction={currentAction as MetadataAction | undefined}
         />
       )}
     </div>

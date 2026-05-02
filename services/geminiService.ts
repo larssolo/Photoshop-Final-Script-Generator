@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeUnit, SaveFormat, ResizeMode, RotationType, ColorProfile, ConditionAction, ConditionProperty, ConditionOperator, Condition, SaveConfig, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn, FlattenAction } from '../types';
+import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeUnit, SaveFormat, ResizeMode, RotationType, ColorProfile, ConditionAction, ConditionProperty, ConditionOperator, Condition, SaveConfig, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn, FlattenAction, MetadataAction } from '../types';
 
 let _ai: GoogleGenAI | null = null;
 
@@ -194,6 +194,47 @@ function buildTrimDescription(action: TrimAction): string {
 function buildColorModeDescription(action: ColorModeAction): string {
   const { profile } = action.config;
   return `Convert the document's color profile to ${profile}. For example, for CMYK, use 'app.activeDocument.changeMode(ChangeMode.CMYK)'. IMPORTANT: If the conversion requires flattening the image, the script must proceed with flattening automatically to complete the conversion.`;
+}
+
+function buildMetadataDescription(action: MetadataAction): string {
+  const { title, author, copyright, description, keywords, stripNumericPrefix, numericPrefixLength, addPrefix, addSuffix } = action.config;
+
+  let desc = '';
+
+  // Metadata fields
+  const metaLines: string[] = [];
+  if (title) metaLines.push(`Set \`doc.info.title = ${JSON.stringify(title)}\``);
+  if (author) metaLines.push(`Set \`doc.info.author = ${JSON.stringify(author)}\``);
+  if (copyright) metaLines.push(`Set \`doc.info.copyrightNotice = ${JSON.stringify(copyright)}\` and \`doc.info.copyrighted = CopyrightedType.COPYRIGHTEDWORK\``);
+  if (description) metaLines.push(`Set \`doc.info.caption = ${JSON.stringify(description)}\``);
+  if (keywords) metaLines.push(`Set \`doc.info.keywords = ${JSON.stringify(keywords.split(',').map(k => k.trim()))}\``);
+
+  if (metaLines.length > 0) {
+    desc += `**Metadata changes** — Apply these to \`var doc = app.activeDocument\` before saving:\n`;
+    metaLines.forEach(line => { desc += `  - ${line}\n`; });
+  }
+
+  // Filename rename
+  const hasRename = stripNumericPrefix || !!addPrefix || !!addSuffix;
+  if (hasRename) {
+    desc += `\n**Filename rename** — The script MUST define a mutable \`baseName\` variable at the TOP of the per-file processing loop (e.g. \`var baseName = docName.replace(/\\.[^\\.]+$/, '');\`). ALL save operations must use \`baseName\` (not the raw document name) when constructing output file paths. Apply these transformations to \`baseName\` in order:\n`;
+
+    if (stripNumericPrefix) {
+      desc += `  1. Strip leading numeric prefix: \`baseName = baseName.replace(/^\\d{${numericPrefixLength}}\\s*-\\s*/, '');\`\n`;
+      desc += `     Example: "123456 - Product_photo" → "Product_photo"\n`;
+    }
+    if (addPrefix) {
+      desc += `  ${stripNumericPrefix ? '2' : '1'}. Prepend prefix: \`baseName = ${JSON.stringify(addPrefix)} + baseName;\`\n`;
+    }
+    if (addSuffix) {
+      const step = [stripNumericPrefix, !!addPrefix].filter(Boolean).length + 1;
+      desc += `  ${step}. Append suffix (before extension): \`baseName = baseName + ${JSON.stringify(addSuffix)};\`\n`;
+    }
+
+    desc += `  IMPORTANT: This \`baseName\` variable must be referenced by ALL subsequent SAVE actions in this script when constructing the output file path. Do NOT use the original document name for save paths when this rename step is present.`;
+  }
+
+  return desc || 'No metadata or rename changes configured.';
 }
 
 function buildFlattenDescription(action: FlattenAction): string {
@@ -467,6 +508,9 @@ function buildPromptFromActions(actions: Action[], outputFolderName: string, par
       case ActionType.FLATTEN:
         stepDescription += `**FLATTEN Action**: ${buildFlattenDescription(action as FlattenAction)}`;
         break;
+      case ActionType.METADATA:
+        stepDescription += `**METADATA Action**:\n${buildMetadataDescription(action as MetadataAction)}`;
+        break;
       default:
         stepDescription += 'Unknown action.';
     }
@@ -590,6 +634,16 @@ const actionConfigProperties = {
     right: { type: Type.BOOLEAN, nullable: true },
     // FlattenAction
     preserveTransparency: { type: Type.BOOLEAN, nullable: true },
+    // MetadataAction
+    title: { type: Type.STRING, nullable: true },
+    author: { type: Type.STRING, nullable: true },
+    copyright: { type: Type.STRING, nullable: true },
+    description: { type: Type.STRING, nullable: true },
+    keywords: { type: Type.STRING, nullable: true },
+    stripNumericPrefix: { type: Type.BOOLEAN, nullable: true },
+    numericPrefixLength: { type: Type.INTEGER, nullable: true },
+    addPrefix: { type: Type.STRING, nullable: true },
+    addSuffix: { type: Type.STRING, nullable: true },
     // ConditionAction
     condition: {
         type: Type.OBJECT,
@@ -717,6 +771,7 @@ export async function parseScriptToActions(scriptContent: string): Promise<{ out
         *   For "ROTATE", convert angles like \`90\` to \`CW_90\` and \`-90\` to \`CCW_90\`.
         *   For "TRIM", identify checks for \`doc.trim(...)\`. Map the parameters to "basedOn" (TrimType), "top", "bottom", "left", and "right".
         *   For "FLATTEN", identify calls to \`doc.flatten()\` or \`app.activeDocument.flatten()\` — set \`"preserveTransparency": false\`. If you see \`doc.mergeVisibleLayers()\` instead, set \`"preserveTransparency": true\`.
+        *   For "METADATA", identify assignments to \`doc.info.*\` (title, author, copyrightNotice, caption, keywords) and map them to the corresponding config properties. For renaming, look for \`baseName.replace()\` calls — if stripping a leading numeric prefix, set \`"stripNumericPrefix": true\` and \`"numericPrefixLength"\`. If a prefix string is prepended to baseName, set \`"addPrefix"\`. If a suffix string is appended to baseName, set \`"addSuffix"\`.
     6.  **Conflict Handling**: For any save operation, determine the filename conflict strategy. Look for checks like \`File(path).exists\`. If it's followed by a \`prompt()\` dialog, set \`"conflictResolution": "PROMPT"\`. If it's followed by a loop that appends an incrementing suffix (e.g., "_1", "_2"), set \`"conflictResolution": "APPEND_SUFFIX"\`. If there is no existence check and the file is saved directly, assume \`"conflictResolution": "OVERWRITE"\`.
     7.  **JSON Output**: Construct the JSON object based on your findings. The structure, including nesting for conditions and folders, must exactly match the schema. Do not include any extra text or explanations.
 

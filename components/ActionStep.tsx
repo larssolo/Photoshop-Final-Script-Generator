@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeMode, RotationType, ConditionAction, ConditionProperty, ConditionOperator, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn } from '../types';
-import { EditIcon, TrashIcon, ResizeIcon, SaveIcon, FolderIcon, DragHandleIcon, RotateIcon, ColorSwatchIcon, BranchIcon, ChevronDownIcon, ScissorsIcon, FlattenIcon } from './icons/Icons';
+import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeMode, RotationType, ConditionAction, ConditionProperty, ConditionOperator, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn, MetadataAction } from '../types';
+import { EditIcon, TrashIcon, ResizeIcon, SaveIcon, FolderIcon, DragHandleIcon, RotateIcon, ColorSwatchIcon, BranchIcon, ChevronDownIcon, ScissorsIcon, FlattenIcon, MetadataIcon } from './icons/Icons';
 
 interface ActionStepProps {
   action: Action;
@@ -172,6 +172,27 @@ const getActionDetails = (action: Action): { title: string; description: string;
         title: 'Flatten Image',
         description: preserveTransparency ? 'Merge Visible Layers (transparency preserved)' : 'Flatten (transparency filled with background)',
         icon: <FlattenIcon className="w-5 h-5 text-cyan-400" />
+      };
+    }
+    case ActionType.METADATA: {
+      const cfg = (action as MetadataAction).config;
+      const metaParts: string[] = [];
+      if (cfg.title) metaParts.push('Title');
+      if (cfg.author) metaParts.push('Author');
+      if (cfg.copyright) metaParts.push('Copyright');
+      if (cfg.description) metaParts.push('Description');
+      if (cfg.keywords) metaParts.push('Keywords');
+      const renameParts: string[] = [];
+      if (cfg.stripNumericPrefix) renameParts.push(`Strip ${cfg.numericPrefixLength}-digit prefix`);
+      if (cfg.addPrefix) renameParts.push(`Prefix "${cfg.addPrefix}"`);
+      if (cfg.addSuffix) renameParts.push(`Suffix "${cfg.addSuffix}"`);
+      const parts: string[] = [];
+      if (metaParts.length > 0) parts.push(`Metadata: ${metaParts.join(', ')}`);
+      if (renameParts.length > 0) parts.push(`Rename: ${renameParts.join(', ')}`);
+      return {
+        title: 'Metadata & Rename',
+        description: parts.length > 0 ? parts.join(' | ') : 'No changes configured',
+        icon: <MetadataIcon className="w-5 h-5 text-violet-400" />
       };
     }
     default:
