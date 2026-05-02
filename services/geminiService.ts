@@ -196,8 +196,11 @@ function buildColorModeDescription(action: ColorModeAction): string {
   return `Convert the document's color profile to ${profile}. For example, for CMYK, use 'app.activeDocument.changeMode(ChangeMode.CMYK)'. IMPORTANT: If the conversion requires flattening the image, the script must proceed with flattening automatically to complete the conversion.`;
 }
 
-function buildFlattenDescription(_action: FlattenAction): string {
-  return `Flatten the image by calling 'app.activeDocument.flatten()'. This merges all layers into a single background layer, discarding any hidden layers. This operation modifies the document directly (it is not performed on a duplicate).`;
+function buildFlattenDescription(action: FlattenAction): string {
+  if (action.config.preserveTransparency) {
+    return `Merge all visible layers while preserving transparency by calling 'app.activeDocument.mergeVisibleLayers()'. This keeps transparent pixels transparent (alpha channel intact). Do NOT call 'doc.flatten()' as that would fill transparent areas with the background color.`;
+  }
+  return `Flatten the image by calling 'app.activeDocument.flatten()'. This merges all layers into a single background layer, filling transparent areas with the background color. This operation modifies the document directly (it is not performed on a duplicate).`;
 }
 
 function buildResizeDescription(action: ResizeAction, outputFolderName: string, parentPath: string = ''): string {
@@ -585,7 +588,9 @@ const actionConfigProperties = {
     bottom: { type: Type.BOOLEAN, nullable: true },
     left: { type: Type.BOOLEAN, nullable: true },
     right: { type: Type.BOOLEAN, nullable: true },
-     // ConditionAction
+    // FlattenAction
+    preserveTransparency: { type: Type.BOOLEAN, nullable: true },
+    // ConditionAction
     condition: {
         type: Type.OBJECT,
         nullable: true,
@@ -711,7 +716,7 @@ export async function parseScriptToActions(scriptContent: string): Promise<{ out
         *   For TIFF/PSD saves, check for layer preservation (\`psdTiffLayers: true\`) vs. flattening (\`psdTiffLayers: false\`).
         *   For "ROTATE", convert angles like \`90\` to \`CW_90\` and \`-90\` to \`CCW_90\`.
         *   For "TRIM", identify checks for \`doc.trim(...)\`. Map the parameters to "basedOn" (TrimType), "top", "bottom", "left", and "right".
-        *   For "FLATTEN", identify calls to \`doc.flatten()\` or \`app.activeDocument.flatten()\`. This action has no config parameters.
+        *   For "FLATTEN", identify calls to \`doc.flatten()\` or \`app.activeDocument.flatten()\` — set \`"preserveTransparency": false\`. If you see \`doc.mergeVisibleLayers()\` instead, set \`"preserveTransparency": true\`.
     6.  **Conflict Handling**: For any save operation, determine the filename conflict strategy. Look for checks like \`File(path).exists\`. If it's followed by a \`prompt()\` dialog, set \`"conflictResolution": "PROMPT"\`. If it's followed by a loop that appends an incrementing suffix (e.g., "_1", "_2"), set \`"conflictResolution": "APPEND_SUFFIX"\`. If there is no existence check and the file is saved directly, assume \`"conflictResolution": "OVERWRITE"\`.
     7.  **JSON Output**: Construct the JSON object based on your findings. The structure, including nesting for conditions and folders, must exactly match the schema. Do not include any extra text or explanations.
 

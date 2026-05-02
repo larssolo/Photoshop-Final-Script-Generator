@@ -166,12 +166,14 @@ const getActionDetails = (action: Action): { title: string; description: string;
         icon: <BranchIcon className="w-5 h-5 text-teal-400" />
       };
     }
-    case ActionType.FLATTEN:
+    case ActionType.FLATTEN: {
+      const preserveTransparency = (action as import('../types').FlattenAction).config.preserveTransparency;
       return {
         title: 'Flatten Image',
-        description: 'Merges all layers into a single background layer',
+        description: preserveTransparency ? 'Merge Visible Layers (transparency preserved)' : 'Flatten (transparency filled with background)',
         icon: <FlattenIcon className="w-5 h-5 text-cyan-400" />
       };
+    }
     default:
       return { title: 'Unknown Action', description: 'Action not recognized', icon: null };
   }
@@ -245,11 +247,9 @@ const ActionStep: React.FC<ActionStepProps> = ({
               )}
             </div>
             <div className="flex items-center gap-1 pl-2">
-              {action.type !== ActionType.FLATTEN && (
-                <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-2 rounded-full hover:bg-brand-gray-600 transition-colors">
-                  <EditIcon className="w-5 h-5 text-brand-gray-300" />
-                </button>
-              )}
+              <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-2 rounded-full hover:bg-brand-gray-600 transition-colors">
+                <EditIcon className="w-5 h-5 text-brand-gray-300" />
+              </button>
               <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-2 rounded-full hover:bg-brand-gray-600 transition-colors">
                 <TrashIcon className="w-5 h-5 text-red-500" />
               </button>

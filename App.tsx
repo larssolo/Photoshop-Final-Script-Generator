@@ -11,6 +11,7 @@ import RotateModal from './components/modals/RotateModal';
 import ColorModeModal from './components/modals/ColorModeModal';
 import ConditionModal from './components/modals/ConditionModal';
 import TrimModal from './components/modals/TrimModal';
+import FlattenModal from './components/modals/FlattenModal';
 import CodeBlock from './components/CodeBlock';
 import UserGuide from './components/UserGuide';
 import { PlusIcon, SparklesIcon, DownloadIcon, BranchIcon, ScissorsIcon, FlattenIcon } from './components/icons/Icons';
@@ -334,10 +335,7 @@ const App: React.FC = () => {
                 <BranchIcon /> Condition
               </button>
                <button
-                onClick={() => {
-                  const flattenAction: FlattenAction = { id: '', type: ActionType.FLATTEN, config: {} };
-                  dispatch({ type: 'ADD_ACTION', payload: { action: flattenAction } });
-                }}
+                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'flatten' })}
                 className="flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
               >
                 <FlattenIcon /> Flatten
@@ -437,6 +435,14 @@ const App: React.FC = () => {
           onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
           onSave={handleAddAction}
           existingAction={currentAction as TrimAction | undefined}
+        />
+      )}
+      {modal.type === 'flatten' && (
+        <FlattenModal
+          isOpen={true}
+          onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
+          onSave={handleAddAction}
+          existingAction={currentAction as FlattenAction | undefined}
         />
       )}
     </div>

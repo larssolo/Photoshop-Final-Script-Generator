@@ -1,7 +1,7 @@
 
 import { Action, ActionType, CreateFolderAction, ConditionAction, TrimAction } from '../types';
 
-export type ModalType = 'resize' | 'save' | 'create-folder' | 'rotate' | 'color-mode' | 'condition' | 'trim' | null;
+export type ModalType = 'resize' | 'save' | 'create-folder' | 'rotate' | 'color-mode' | 'condition' | 'trim' | 'flatten' | null;
 
 export interface AppState {
   actions: Action[];
@@ -249,6 +249,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
                 case ActionType.COLOR_MODE: modalType = 'color-mode'; break;
                 case ActionType.CONDITION: modalType = 'condition'; break;
                 case ActionType.TRIM: modalType = 'trim'; break;
+                case ActionType.FLATTEN: modalType = 'flatten'; break;
             }
         }
 

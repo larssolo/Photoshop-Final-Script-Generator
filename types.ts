@@ -170,7 +170,9 @@ export interface ConditionAction {
 export interface FlattenAction {
   id: string;
   type: ActionType.FLATTEN;
-  config: Record<string, never>;
+  config: {
+    preserveTransparency: boolean;
+  };
 }
 
 export type Action = ResizeAction | SaveAction | CreateFolderAction | RotateAction | ColorModeAction | ConditionAction | TrimAction | FlattenAction;
