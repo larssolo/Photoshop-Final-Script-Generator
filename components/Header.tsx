@@ -16,7 +16,7 @@ const Header: React.FC<HeaderProps> = ({ onImportClick }) => {
             </div>
             <div>
             <h1 className="text-2xl font-bold text-white">Photoshop Script Generator</h1>
-            <p className="text-sm text-brand-gray-300">Build automated workflows for image processing</p>
+            <p className="text-sm text-brand-gray-300">Turn complex image processing into automated Photoshop workflows.</p>
             </div>
         </div>
         
