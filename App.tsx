@@ -367,7 +367,7 @@ const App: React.FC = () => {
              <h2 className="text-2xl font-bold mb-4 text-white">
                 {generatedScript || isLoading ? 'Generated Script (ExtendScript)' : 'User Guide'}
              </h2>
-             <div className="flex-grow">
+             <div className={generatedScript || isLoading ? '' : 'flex-grow'}>
                {generatedScript || isLoading ? (
                  <CodeBlock script={generatedScript} isLoading={isLoading} loadingMessage={loadingMessage}/>
                ) : (
