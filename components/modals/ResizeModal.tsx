@@ -81,7 +81,7 @@ export const SaveForm: FC<SaveFormProps> = ({ config, onUpdate, idPrefix, accent
                     <input type="range" min="0" max="12" value={jpegQuality} onChange={e => onUpdate({ ...config, jpegQuality: parseInt(e.target.value) })} className={`w-full h-2 bg-brand-gray-600 rounded-lg appearance-none cursor-pointer accent-${accentColor}-500`} />
                     <div className="flex justify-between mt-1 text-xs text-brand-gray-500">
                         <span>Low (0)</span>
-                        <span>High (8)</span>
+                        <span>Medium (6)</span>
                         <span>Max (12)</span>
                     </div>
                 </div>

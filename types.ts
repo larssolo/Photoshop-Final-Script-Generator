@@ -7,6 +7,8 @@ export enum ActionType {
   COLOR_MODE = 'COLOR_MODE',
   CONDITION = 'CONDITION',
   TRIM = 'TRIM',
+  FLATTEN = 'FLATTEN',
+  METADATA = 'METADATA',
 }
 
 export enum ResizeUnit {
@@ -166,7 +168,31 @@ export interface ConditionAction {
 }
 
 
-export type Action = ResizeAction | SaveAction | CreateFolderAction | RotateAction | ColorModeAction | ConditionAction | TrimAction;
+export interface FlattenAction {
+  id: string;
+  type: ActionType.FLATTEN;
+  config: {
+    preserveTransparency: boolean;
+  };
+}
+
+export interface MetadataAction {
+  id: string;
+  type: ActionType.METADATA;
+  config: {
+    title?: string;
+    author?: string;
+    copyright?: string;
+    description?: string;
+    keywords?: string;
+    stripNumericPrefix: boolean;
+    numericPrefixLength: number;
+    addPrefix?: string;
+    addSuffix?: string;
+  };
+}
+
+export type Action = ResizeAction | SaveAction | CreateFolderAction | RotateAction | ColorModeAction | ConditionAction | TrimAction | FlattenAction | MetadataAction;
 
 export interface Preset {
   name: string;

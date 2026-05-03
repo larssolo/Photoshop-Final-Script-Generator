@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeUnit, SaveFormat, ResizeMode, RotationType, ColorProfile, ConditionAction, ConditionProperty, ConditionOperator, Condition, SaveConfig, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn } from '../types';
+import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeUnit, SaveFormat, ResizeMode, RotationType, ColorProfile, ConditionAction, ConditionProperty, ConditionOperator, Condition, SaveConfig, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn, FlattenAction, MetadataAction } from '../types';
 
 let _ai: GoogleGenAI | null = null;
 
@@ -8,7 +8,7 @@ function getAI(): GoogleGenAI {
   if (!_ai) {
     const apiKey = process.env.API_KEY as string;
     if (!apiKey) {
-      throw new Error("API-nøgle mangler. Opret en .env.local fil med: GEMINI_API_KEY=din_nøgle_her");
+      throw new Error("API key missing. Create a .env.local file with: GEMINI_API_KEY=your_key_here");
     }
     _ai = new GoogleGenAI({ apiKey });
   }
@@ -94,6 +94,10 @@ const buildFileLoopSection = (actionSteps: string) => `
 // var doc = null;
 // try {
 //   doc = app.open(file);
+//   // CRITICAL: baseName is the base filename (without extension) used by ALL save operations.
+//   // It must be declared here, at the very top of the try block, before any actions run.
+//   // Any METADATA rename steps will modify this variable in place.
+//   var baseName = doc.name.replace(/\.[^\.]+$/, '');
 //
 //   // --- Action Sequence ---
 //   // Execute the following actions IN ORDER. Conditional blocks (if statements) and folder containers are crucial.
@@ -193,9 +197,63 @@ function buildTrimDescription(action: TrimAction): string {
 
 function buildColorModeDescription(action: ColorModeAction): string {
   const { profile } = action.config;
-  return `Convert the document's color profile to ${profile}. For example, for CMYK, use 'app.activeDocument.changeMode(ChangeMode.CMYK)'. IMPORTANT: If the conversion requires flattening the image, the script must proceed with flattening automatically to complete the conversion.`;
+  const modeMap: Record<string, string> = {
+    'RGB': 'ChangeMode.RGB',
+    'CMYK': 'ChangeMode.CMYK',
+    'GRAYSCALE': 'ChangeMode.GRAYSCALE',
+  };
+  const changeMode = modeMap[profile] ?? `ChangeMode.${profile}`;
+  return `Convert the document's color profile to ${profile} by calling \`doc.changeMode(${changeMode})\`. IMPORTANT: Some conversions (e.g. to Grayscale or CMYK) may require the document to be flattened first. If Photoshop throws an error, the script must automatically flatten (\`doc.flatten()\`) and retry the conversion — do not prompt the user.`;
 }
 
+function buildMetadataDescription(action: MetadataAction): string {
+  const { title, author, copyright, description, keywords, stripNumericPrefix, numericPrefixLength, addPrefix, addSuffix } = action.config;
+
+  let desc = '';
+
+  // Metadata fields
+  const metaLines: string[] = [];
+  if (title) metaLines.push(`doc.info.title = ${JSON.stringify(title)};`);
+  if (author) metaLines.push(`doc.info.author = ${JSON.stringify(author)};`);
+  if (copyright) metaLines.push(`doc.info.copyrightNotice = ${JSON.stringify(copyright)}; doc.info.copyrighted = CopyrightedType.COPYRIGHTEDWORK;`);
+  if (description) metaLines.push(`doc.info.caption = ${JSON.stringify(description)};`);
+  if (keywords) metaLines.push(`doc.info.keywords = ${JSON.stringify(keywords.split(',').map(k => k.trim()))};`);
+
+  if (metaLines.length > 0) {
+    desc += `**Metadata changes** — Apply these directly to the already-open document using the existing \`doc\` variable.\n`;
+    desc += `CRITICAL: Do NOT write \`var doc = app.activeDocument\` — \`doc\` is already declared in the file loop. Just use the existing variable:\n`;
+    metaLines.forEach(line => { desc += `  \`${line}\`\n`; });
+  }
+
+  // Filename rename
+  const hasRename = stripNumericPrefix || !!addPrefix || !!addSuffix;
+  if (hasRename) {
+    desc += `\n**Filename rename** — The \`baseName\` variable is already declared at the top of the file processing try block (as \`var baseName = doc.name.replace(/\\.[^\\.]+$/, '');\`). Do NOT redeclare it. Apply ONLY these in-place modifications to the existing \`baseName\` variable, in order:\n`;
+
+    if (stripNumericPrefix) {
+      desc += `  1. Strip leading numeric prefix: \`baseName = baseName.replace(/^\\d{${numericPrefixLength}}\\s*-\\s*/, '');\`\n`;
+      desc += `     Example: "123456 - Product_photo" → "Product_photo"\n`;
+    }
+    if (addPrefix) {
+      desc += `  ${stripNumericPrefix ? '2' : '1'}. Prepend prefix: \`baseName = ${JSON.stringify(addPrefix)} + baseName;\`\n`;
+    }
+    if (addSuffix) {
+      const step = [stripNumericPrefix, !!addPrefix].filter(Boolean).length + 1;
+      desc += `  ${step}. Append suffix (before extension): \`baseName = baseName + ${JSON.stringify(addSuffix)};\`\n`;
+    }
+
+    desc += `  CRITICAL: ALL save operations throughout this entire script MUST use \`baseName\` (never \`doc.name\` or \`file.name\`) when constructing output file paths.`;
+  }
+
+  return desc || 'No metadata or rename changes configured.';
+}
+
+function buildFlattenDescription(action: FlattenAction): string {
+  if (action.config.preserveTransparency) {
+    return `Merge all visible layers while preserving transparency by calling 'app.activeDocument.mergeVisibleLayers()'. This keeps transparent pixels transparent (alpha channel intact). Do NOT call 'doc.flatten()' as that would fill transparent areas with the background color.`;
+  }
+  return `Flatten the image by calling 'app.activeDocument.flatten()'. This merges all layers into a single background layer, filling transparent areas with the background color. This operation modifies the document directly (it is not performed on a duplicate).`;
+}
 
 function buildResizeDescription(action: ResizeAction, outputFolderName: string, parentPath: string = ''): string {
   const { mode, width, height, length, unit, maintainAspectRatio, resolution, saveConfig, saveLogic, conditionalSaveConfig } = action.config;
@@ -284,9 +342,9 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
   }
   
   if (appendSuffix) {
-    desc += `Append the suffix "${appendSuffix}" to the original filename. `;
+    desc += `Use \`baseName\` as the base filename and append the suffix "${appendSuffix}" to it (e.g. \`baseName + "${appendSuffix}"\`). `;
   } else {
-    desc += `Use the original filename. `;
+    desc += `Use \`baseName\` as the base filename (this variable is always declared at the top of the file loop). `;
   }
 
   desc += `The format should be ${format}. `;
@@ -311,10 +369,14 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
           5. Save the duplicate using: \`dupDoc.saveAs(saveFile, pngSaveOptions, true, Extension.LOWERCASE);\`
           6. Close the duplicate without saving changes.`;
       } else {
-          desc += 'Save with transparency disabled. ';
-          desc += `Because PNGs do not support layers, the image must be flattened. ${DUPLICATE_FLATTEN_SAVE_CLOSE} `;
-          desc += 'When creating PNGSaveOptions, explicitly set `pngSaveOptions.interlaced = false` (required for Photoshop 2023+ compatibility). ';
-          desc += 'Save using: `dupDoc.saveAs(saveFile, pngSaveOptions, true, Extension.LOWERCASE);`';
+          desc += `Save with transparency DISABLED. Use this exact process:
+          1. Duplicate the active document.
+          2. Flatten the duplicate: \`dupDoc.flatten();\`
+          3. Create \`var pngSaveOptions = new PNGSaveOptions();\`. Set:
+             - \`pngSaveOptions.transparency = false;\`
+             - \`pngSaveOptions.interlaced = false;\` (required for Photoshop 2023+ compatibility)
+          4. Save: \`dupDoc.saveAs(saveFile, pngSaveOptions, true, Extension.LOWERCASE);\`
+          5. Close the duplicate without saving changes.`;
       }
       break;
     case SaveFormat.TIFF:
@@ -323,10 +385,10 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
         const preserveTiffTransparency = tiffTransparency;
         const flattenTiff = !psdTiffLayers;
 
-        // Helper text for handling transparency vs flattening
-        const flattenInstruction = preserveTiffTransparency 
-            ? "Check if there is more than one layer: \`if (doc.layers.length > 1) { doc.mergeVisibleLayers(); }\`. Then, ensure transparency is supported: \`if (doc.activeLayer.isBackgroundLayer) { doc.activeLayer.isBackgroundLayer = false; }\`. DO NOT use 'doc.flatten()'." 
-            : "Flatten the duplicate (doc.flatten()).";
+        // Helper text for handling transparency vs flattening (always operates on dupDoc, never doc)
+        const flattenInstruction = preserveTiffTransparency
+            ? "On the duplicate: check layer count: \`if (dupDoc.layers.length > 1) { dupDoc.mergeVisibleLayers(); }\`. Then ensure transparency is supported — wrap in try-catch as it can throw in PS 2024+: \`try { if (dupDoc.activeLayer.isBackgroundLayer) { dupDoc.activeLayer.isBackgroundLayer = false; } } catch(e) {}\`. DO NOT call \`dupDoc.flatten()\`."
+            : "Flatten the duplicate: \`dupDoc.flatten();\`";
 
         const transparencyOpt = preserveTiffTransparency ? "tiffSaveOptions.transparency = true;" : "tiffSaveOptions.transparency = false;";
 
@@ -335,12 +397,16 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
 
 **PATH 1: \`if (doc.mode === DocumentMode.CMYK)\`**
 This logic is for CMYK files ONLY.
-*   **Procedure:** A CMYK TIFF MUST ALWAYS be saved by duplicating the document. ${flattenInstruction} Then save the duplicate, and close it.
-*   **Save Options:** Create a \`TiffSaveOptions\` object. Set ONLY these properties:
-    1.  \`imageCompression = TIFFEncoding.${compressionConstant};\`
-    2.  \`byteOrder = ByteOrder.IBM;\`
-    3.  \`embedColorProfile = true;\`
-    4.  ${transparencyOpt}
+*   **Procedure:**
+    1. Duplicate the document.
+    2. ${flattenInstruction}
+    3. Create a \`TiffSaveOptions\` object. Set ONLY these properties:
+       - \`tiffSaveOptions.imageCompression = TIFFEncoding.${compressionConstant};\`
+       - \`tiffSaveOptions.byteOrder = ByteOrder.IBM;\`
+       - \`tiffSaveOptions.embedColorProfile = true;\`
+       - \`${transparencyOpt}\`
+    4. Save: \`dupDoc.saveAs(saveFile, tiffSaveOptions, true, Extension.LOWERCASE);\`
+    5. Close the duplicate without saving changes.
 *   **CRITICAL:** DO NOT add options for \`layers\` or \`alphaChannels\` for CMYK unless absolutely necessary.
 
 **PATH 2: \`else\` (for all other color modes like RGB)**
@@ -457,6 +523,12 @@ function buildPromptFromActions(actions: Action[], outputFolderName: string, par
         const conditionString = buildConditionString(conditionAction.config.condition);
         const thenPromptCondition = buildPromptFromActions(conditionAction.then, outputFolderName, parentPath, level + 1);
         stepDescription += `**CONDITION**: Construct an 'if (${conditionString}) { ... }' block. Inside this block, execute the following nested steps:\n${thenPromptCondition}`;
+        break;
+      case ActionType.FLATTEN:
+        stepDescription += `**FLATTEN Action**: ${buildFlattenDescription(action as FlattenAction)}`;
+        break;
+      case ActionType.METADATA:
+        stepDescription += `**METADATA Action**:\n${buildMetadataDescription(action as MetadataAction)}`;
         break;
       default:
         stepDescription += 'Unknown action.';
@@ -579,7 +651,19 @@ const actionConfigProperties = {
     bottom: { type: Type.BOOLEAN, nullable: true },
     left: { type: Type.BOOLEAN, nullable: true },
     right: { type: Type.BOOLEAN, nullable: true },
-     // ConditionAction
+    // FlattenAction
+    preserveTransparency: { type: Type.BOOLEAN, nullable: true },
+    // MetadataAction
+    title: { type: Type.STRING, nullable: true },
+    author: { type: Type.STRING, nullable: true },
+    copyright: { type: Type.STRING, nullable: true },
+    description: { type: Type.STRING, nullable: true },
+    keywords: { type: Type.STRING, nullable: true },
+    stripNumericPrefix: { type: Type.BOOLEAN, nullable: true },
+    numericPrefixLength: { type: Type.INTEGER, nullable: true },
+    addPrefix: { type: Type.STRING, nullable: true },
+    addSuffix: { type: Type.STRING, nullable: true },
+    // ConditionAction
     condition: {
         type: Type.OBJECT,
         nullable: true,
@@ -705,6 +789,8 @@ export async function parseScriptToActions(scriptContent: string): Promise<{ out
         *   For TIFF/PSD saves, check for layer preservation (\`psdTiffLayers: true\`) vs. flattening (\`psdTiffLayers: false\`).
         *   For "ROTATE", convert angles like \`90\` to \`CW_90\` and \`-90\` to \`CCW_90\`.
         *   For "TRIM", identify checks for \`doc.trim(...)\`. Map the parameters to "basedOn" (TrimType), "top", "bottom", "left", and "right".
+        *   For "FLATTEN", identify calls to \`doc.flatten()\` or \`app.activeDocument.flatten()\` — set \`"preserveTransparency": false\`. If you see \`doc.mergeVisibleLayers()\` instead, set \`"preserveTransparency": true\`.
+        *   For "METADATA", identify assignments to \`doc.info.*\` (title, author, copyrightNotice, caption, keywords) and map them to the corresponding config properties. For renaming, look for \`baseName.replace()\` calls — if stripping a leading numeric prefix, set \`"stripNumericPrefix": true\` and \`"numericPrefixLength"\`. If a prefix string is prepended to baseName, set \`"addPrefix"\`. If a suffix string is appended to baseName, set \`"addSuffix"\`.
     6.  **Conflict Handling**: For any save operation, determine the filename conflict strategy. Look for checks like \`File(path).exists\`. If it's followed by a \`prompt()\` dialog, set \`"conflictResolution": "PROMPT"\`. If it's followed by a loop that appends an incrementing suffix (e.g., "_1", "_2"), set \`"conflictResolution": "APPEND_SUFFIX"\`. If there is no existence check and the file is saved directly, assume \`"conflictResolution": "OVERWRITE"\`.
     7.  **JSON Output**: Construct the JSON object based on your findings. The structure, including nesting for conditions and folders, must exactly match the schema. Do not include any extra text or explanations.
 

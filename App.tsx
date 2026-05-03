@@ -1,6 +1,6 @@
 
 import React, { useCallback, useRef, useState } from 'react';
-import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ConditionAction, TrimAction } from './types';
+import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ConditionAction, TrimAction, FlattenAction, MetadataAction } from './types';
 import { generateScriptPrompt, parseScriptToActions } from './services/geminiService';
 import Header from './components/Header';
 import ActionStep from './components/ActionStep';
@@ -11,9 +11,11 @@ import RotateModal from './components/modals/RotateModal';
 import ColorModeModal from './components/modals/ColorModeModal';
 import ConditionModal from './components/modals/ConditionModal';
 import TrimModal from './components/modals/TrimModal';
+import FlattenModal from './components/modals/FlattenModal';
+import MetadataModal from './components/modals/MetadataModal';
 import CodeBlock from './components/CodeBlock';
 import UserGuide from './components/UserGuide';
-import { PlusIcon, SparklesIcon, DownloadIcon, BranchIcon, ScissorsIcon } from './components/icons/Icons';
+import { PlusIcon, SparklesIcon, DownloadIcon, BranchIcon, ScissorsIcon, FlattenIcon, MetadataIcon } from './components/icons/Icons';
 import { useAppState, useAppDispatch } from './state/AppContext';
 
 const App: React.FC = () => {
@@ -327,11 +329,23 @@ const App: React.FC = () => {
               >
                 <PlusIcon /> Color Mode
               </button>
-               <button 
+               <button
                 onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'condition' })}
-                className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 col-span-2 lg:col-span-3"
+                className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
               >
                 <BranchIcon /> Condition
+              </button>
+               <button
+                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'flatten' })}
+                className="flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
+              >
+                <FlattenIcon /> Flatten
+              </button>
+               <button
+                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'metadata' })}
+                className="flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 col-span-2 lg:col-span-3"
+              >
+                <MetadataIcon /> Metadata &amp; Rename
               </button>
             </div>
             
@@ -353,7 +367,7 @@ const App: React.FC = () => {
              <h2 className="text-2xl font-bold mb-4 text-white">
                 {generatedScript || isLoading ? 'Generated Script (ExtendScript)' : 'User Guide'}
              </h2>
-             <div className="flex-grow">
+             <div className={generatedScript || isLoading ? '' : 'flex-grow'}>
                {generatedScript || isLoading ? (
                  <CodeBlock script={generatedScript} isLoading={isLoading} loadingMessage={loadingMessage}/>
                ) : (
@@ -373,6 +387,13 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
+
+      <footer className="border-t border-brand-gray-700 mt-8 py-5 text-center">
+        <p className="text-sm text-brand-gray-500">
+          Built in collaboration with Claude Anthropic, Google Gemini &amp;{' '}
+          <a href="https://www.larssohl.dk" target="_blank" rel="noopener noreferrer" className="hover:text-brand-gray-300 transition-colors underline underline-offset-2">www.larssohl.dk</a>
+        </p>
+      </footer>
 
       {modal.type === 'resize' && (
         <ResizeModal 
@@ -428,6 +449,22 @@ const App: React.FC = () => {
           onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
           onSave={handleAddAction}
           existingAction={currentAction as TrimAction | undefined}
+        />
+      )}
+      {modal.type === 'flatten' && (
+        <FlattenModal
+          isOpen={true}
+          onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
+          onSave={handleAddAction}
+          existingAction={currentAction as FlattenAction | undefined}
+        />
+      )}
+      {modal.type === 'metadata' && (
+        <MetadataModal
+          isOpen={true}
+          onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
+          onSave={handleAddAction}
+          existingAction={currentAction as MetadataAction | undefined}
         />
       )}
     </div>
