@@ -94,6 +94,10 @@ const buildFileLoopSection = (actionSteps: string) => `
 // var doc = null;
 // try {
 //   doc = app.open(file);
+//   // CRITICAL: baseName is the base filename (without extension) used by ALL save operations.
+//   // It must be declared here, at the very top of the try block, before any actions run.
+//   // Any METADATA rename steps will modify this variable in place.
+//   var baseName = doc.name.replace(/\.[^\.]+$/, '');
 //
 //   // --- Action Sequence ---
 //   // Execute the following actions IN ORDER. Conditional blocks (if statements) and folder containers are crucial.
@@ -203,21 +207,22 @@ function buildMetadataDescription(action: MetadataAction): string {
 
   // Metadata fields
   const metaLines: string[] = [];
-  if (title) metaLines.push(`Set \`doc.info.title = ${JSON.stringify(title)}\``);
-  if (author) metaLines.push(`Set \`doc.info.author = ${JSON.stringify(author)}\``);
-  if (copyright) metaLines.push(`Set \`doc.info.copyrightNotice = ${JSON.stringify(copyright)}\` and \`doc.info.copyrighted = CopyrightedType.COPYRIGHTEDWORK\``);
-  if (description) metaLines.push(`Set \`doc.info.caption = ${JSON.stringify(description)}\``);
-  if (keywords) metaLines.push(`Set \`doc.info.keywords = ${JSON.stringify(keywords.split(',').map(k => k.trim()))}\``);
+  if (title) metaLines.push(`doc.info.title = ${JSON.stringify(title)};`);
+  if (author) metaLines.push(`doc.info.author = ${JSON.stringify(author)};`);
+  if (copyright) metaLines.push(`doc.info.copyrightNotice = ${JSON.stringify(copyright)}; doc.info.copyrighted = CopyrightedType.COPYRIGHTEDWORK;`);
+  if (description) metaLines.push(`doc.info.caption = ${JSON.stringify(description)};`);
+  if (keywords) metaLines.push(`doc.info.keywords = ${JSON.stringify(keywords.split(',').map(k => k.trim()))};`);
 
   if (metaLines.length > 0) {
-    desc += `**Metadata changes** — Apply these to \`var doc = app.activeDocument\` before saving:\n`;
-    metaLines.forEach(line => { desc += `  - ${line}\n`; });
+    desc += `**Metadata changes** — Apply these directly to the already-open document using the existing \`doc\` variable.\n`;
+    desc += `CRITICAL: Do NOT write \`var doc = app.activeDocument\` — \`doc\` is already declared in the file loop. Just use the existing variable:\n`;
+    metaLines.forEach(line => { desc += `  \`${line}\`\n`; });
   }
 
   // Filename rename
   const hasRename = stripNumericPrefix || !!addPrefix || !!addSuffix;
   if (hasRename) {
-    desc += `\n**Filename rename** — The script MUST define a mutable \`baseName\` variable at the TOP of the per-file processing loop (e.g. \`var baseName = docName.replace(/\\.[^\\.]+$/, '');\`). ALL save operations must use \`baseName\` (not the raw document name) when constructing output file paths. Apply these transformations to \`baseName\` in order:\n`;
+    desc += `\n**Filename rename** — The \`baseName\` variable is already declared at the top of the file processing try block (as \`var baseName = doc.name.replace(/\\.[^\\.]+$/, '');\`). Do NOT redeclare it. Apply ONLY these in-place modifications to the existing \`baseName\` variable, in order:\n`;
 
     if (stripNumericPrefix) {
       desc += `  1. Strip leading numeric prefix: \`baseName = baseName.replace(/^\\d{${numericPrefixLength}}\\s*-\\s*/, '');\`\n`;
@@ -231,7 +236,7 @@ function buildMetadataDescription(action: MetadataAction): string {
       desc += `  ${step}. Append suffix (before extension): \`baseName = baseName + ${JSON.stringify(addSuffix)};\`\n`;
     }
 
-    desc += `  IMPORTANT: This \`baseName\` variable must be referenced by ALL subsequent SAVE actions in this script when constructing the output file path. Do NOT use the original document name for save paths when this rename step is present.`;
+    desc += `  CRITICAL: ALL save operations throughout this entire script MUST use \`baseName\` (never \`doc.name\` or \`file.name\`) when constructing output file paths.`;
   }
 
   return desc || 'No metadata or rename changes configured.';
@@ -331,9 +336,9 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
   }
   
   if (appendSuffix) {
-    desc += `Append the suffix "${appendSuffix}" to the original filename. `;
+    desc += `Use \`baseName\` as the base filename and append the suffix "${appendSuffix}" to it (e.g. \`baseName + "${appendSuffix}"\`). `;
   } else {
-    desc += `Use the original filename. `;
+    desc += `Use \`baseName\` as the base filename (this variable is always declared at the top of the file loop). `;
   }
 
   desc += `The format should be ${format}. `;
