@@ -197,7 +197,13 @@ function buildTrimDescription(action: TrimAction): string {
 
 function buildColorModeDescription(action: ColorModeAction): string {
   const { profile } = action.config;
-  return `Convert the document's color profile to ${profile}. For example, for CMYK, use 'app.activeDocument.changeMode(ChangeMode.CMYK)'. IMPORTANT: If the conversion requires flattening the image, the script must proceed with flattening automatically to complete the conversion.`;
+  const modeMap: Record<string, string> = {
+    'RGB': 'ChangeMode.RGB',
+    'CMYK': 'ChangeMode.CMYK',
+    'GRAYSCALE': 'ChangeMode.GRAYSCALE',
+  };
+  const changeMode = modeMap[profile] ?? `ChangeMode.${profile}`;
+  return `Convert the document's color profile to ${profile} by calling \`doc.changeMode(${changeMode})\`. IMPORTANT: Some conversions (e.g. to Grayscale or CMYK) may require the document to be flattened first. If Photoshop throws an error, the script must automatically flatten (\`doc.flatten()\`) and retry the conversion — do not prompt the user.`;
 }
 
 function buildMetadataDescription(action: MetadataAction): string {
@@ -363,10 +369,14 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
           5. Save the duplicate using: \`dupDoc.saveAs(saveFile, pngSaveOptions, true, Extension.LOWERCASE);\`
           6. Close the duplicate without saving changes.`;
       } else {
-          desc += 'Save with transparency disabled. ';
-          desc += `Because PNGs do not support layers, the image must be flattened. ${DUPLICATE_FLATTEN_SAVE_CLOSE} `;
-          desc += 'When creating PNGSaveOptions, explicitly set `pngSaveOptions.interlaced = false` (required for Photoshop 2023+ compatibility). ';
-          desc += 'Save using: `dupDoc.saveAs(saveFile, pngSaveOptions, true, Extension.LOWERCASE);`';
+          desc += `Save with transparency DISABLED. Use this exact process:
+          1. Duplicate the active document.
+          2. Flatten the duplicate: \`dupDoc.flatten();\`
+          3. Create \`var pngSaveOptions = new PNGSaveOptions();\`. Set:
+             - \`pngSaveOptions.transparency = false;\`
+             - \`pngSaveOptions.interlaced = false;\` (required for Photoshop 2023+ compatibility)
+          4. Save: \`dupDoc.saveAs(saveFile, pngSaveOptions, true, Extension.LOWERCASE);\`
+          5. Close the duplicate without saving changes.`;
       }
       break;
     case SaveFormat.TIFF:
@@ -375,10 +385,10 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
         const preserveTiffTransparency = tiffTransparency;
         const flattenTiff = !psdTiffLayers;
 
-        // Helper text for handling transparency vs flattening
-        const flattenInstruction = preserveTiffTransparency 
-            ? "Check if there is more than one layer: \`if (doc.layers.length > 1) { doc.mergeVisibleLayers(); }\`. Then, ensure transparency is supported: \`if (doc.activeLayer.isBackgroundLayer) { doc.activeLayer.isBackgroundLayer = false; }\`. DO NOT use 'doc.flatten()'." 
-            : "Flatten the duplicate (doc.flatten()).";
+        // Helper text for handling transparency vs flattening (always operates on dupDoc, never doc)
+        const flattenInstruction = preserveTiffTransparency
+            ? "On the duplicate: check layer count: \`if (dupDoc.layers.length > 1) { dupDoc.mergeVisibleLayers(); }\`. Then ensure transparency is supported — wrap in try-catch as it can throw in PS 2024+: \`try { if (dupDoc.activeLayer.isBackgroundLayer) { dupDoc.activeLayer.isBackgroundLayer = false; } } catch(e) {}\`. DO NOT call \`dupDoc.flatten()\`."
+            : "Flatten the duplicate: \`dupDoc.flatten();\`";
 
         const transparencyOpt = preserveTiffTransparency ? "tiffSaveOptions.transparency = true;" : "tiffSaveOptions.transparency = false;";
 
@@ -387,12 +397,16 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
 
 **PATH 1: \`if (doc.mode === DocumentMode.CMYK)\`**
 This logic is for CMYK files ONLY.
-*   **Procedure:** A CMYK TIFF MUST ALWAYS be saved by duplicating the document. ${flattenInstruction} Then save the duplicate, and close it.
-*   **Save Options:** Create a \`TiffSaveOptions\` object. Set ONLY these properties:
-    1.  \`imageCompression = TIFFEncoding.${compressionConstant};\`
-    2.  \`byteOrder = ByteOrder.IBM;\`
-    3.  \`embedColorProfile = true;\`
-    4.  ${transparencyOpt}
+*   **Procedure:**
+    1. Duplicate the document.
+    2. ${flattenInstruction}
+    3. Create a \`TiffSaveOptions\` object. Set ONLY these properties:
+       - \`tiffSaveOptions.imageCompression = TIFFEncoding.${compressionConstant};\`
+       - \`tiffSaveOptions.byteOrder = ByteOrder.IBM;\`
+       - \`tiffSaveOptions.embedColorProfile = true;\`
+       - \`${transparencyOpt}\`
+    4. Save: \`dupDoc.saveAs(saveFile, tiffSaveOptions, true, Extension.LOWERCASE);\`
+    5. Close the duplicate without saving changes.
 *   **CRITICAL:** DO NOT add options for \`layers\` or \`alphaChannels\` for CMYK unless absolutely necessary.
 
 **PATH 2: \`else\` (for all other color modes like RGB)**

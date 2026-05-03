@@ -16,9 +16,11 @@ const TrimModal: React.FC<TrimModalProps> = ({ isOpen, onClose, onSave, existing
   const [bottom, setBottom] = useState<boolean>(true);
   const [left, setLeft] = useState<boolean>(true);
   const [right, setRight] = useState<boolean>(true);
+  const [error, setError] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
+      setError('');
       if (existingAction) {
         const config = existingAction.config;
         setBasedOn(config.basedOn);
@@ -37,6 +39,11 @@ const TrimModal: React.FC<TrimModalProps> = ({ isOpen, onClose, onSave, existing
   }, [existingAction, isOpen]);
 
   const handleSave = () => {
+    if (!top && !bottom && !left && !right) {
+      setError('At least one side must be selected.');
+      return;
+    }
+    setError('');
     const action: TrimAction = {
       id: existingAction?.id || '',
       type: ActionType.TRIM,
@@ -87,7 +94,13 @@ const TrimModal: React.FC<TrimModalProps> = ({ isOpen, onClose, onSave, existing
         
         {/* Content */}
         <div className="p-6 space-y-6">
-            
+
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-200 text-sm rounded-lg p-3">
+                {error}
+              </div>
+            )}
+
             {/* Based On Section */}
             <div>
                 <label className="block text-sm font-medium text-brand-gray-300 mb-3">Based On</label>
