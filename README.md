@@ -1,20 +1,49 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+Welcome to the Script Generator!
+Follow these simple steps to automate your Photoshop workflow.
 
-# Run and deploy your AI Studio app
+Have a try: https://photoshop-final-script-generator.vercel.app/
 
-This contains everything you need to run your app locally.
+1
+Build Your Actions
+Use the  buttons on the left to add steps like 'Resize', 'Save', or 'Create Folder' to build your script.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1IklpL-jL--JFUE2lW7XGterdoI1lHAfO
+2
+Generate the Script
+Once your steps are configured, click the  'Generate Script' button to let the AI write the code for you.
 
-## Run Locally
+3
+Copy or Download
+Your script will appear here. Use the  copy or  download button to get the .jsx file.
 
-**Prerequisites:**  Node.js
+4
+Run in Photoshop
+In Photoshop, go to File > Scripts > Browse... and select your downloaded file to run the automation.
 
+-----
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Resize
+Scale the image to fixed dimensions (width × height), a percentage, or so the longest edge fits a given size. Set DPI and choose whether to maintain the aspect ratio.
+
+Save
+Export the image as JPEG, PNG, TIFF, or PSD. Configure quality, transparency, compression, and optionally add a filename suffix or subfolder to the output path.
+
+Folder
+Create a subfolder inside the output folder. Actions placed inside the folder step automatically save there — useful for splitting output into categories.
+
+Rotate
+Rotate the image 90° clockwise, 90° counter-clockwise, or 180°.
+
+Trim
+Automatically crop edges based on transparency or background colour. Choose which sides (top, bottom, left, right) to trim. Actions placed inside operate on the trimmed image — the original edges are restored afterwards.
+
+Color Mode
+Convert the colour space to RGB, CMYK, or Grayscale. Typically used before saving to a format with specific requirements, e.g. CMYK for print.
+
+Condition
+Add conditional logic (if/then). Actions placed inside only run when the condition is met — e.g. "only if width > 2000 px" or "only if filename contains 'web'".
+
+Flatten
+Merge all layers into one. Choose between a full flatten (transparent areas filled with the background colour) or Merge Visible Layers (transparency preserved).
+
+Metadata & Rename
+Update image metadata (title, author, copyright, description, keywords) and rename the output file — e.g. strip a numeric prefix ("123456 - "), add a prefix, or add a suffix.
