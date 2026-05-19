@@ -381,7 +381,7 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
       break;
     case SaveFormat.TIFF:
         const compression = tiffCompression || 'LZW';
-        const compressionConstant = { 'NONE': 'NONE', 'LZW': 'TIFFLZW', 'ZIP': 'TIFFZIP' }[compression];
+        const compressionConstant = { 'NONE': 'NONE', 'LZW': 'LZW', 'ZIP': 'TIFFZIP' }[compression];
         const preserveTiffTransparency = tiffTransparency;
         const flattenTiff = !psdTiffLayers;
 
@@ -411,15 +411,16 @@ This logic is for CMYK files ONLY.
 
 **PATH 2: \`else\` (for all other color modes like RGB)**
 This logic is for non-CMYK files.
-*   **Procedure:** ALWAYS use the duplicate-save-close pattern. NEVER save the active document directly in Photoshop 2022+ as this can trigger an unwanted save dialog.
+*   **Procedure:** ALWAYS use the duplicate-save-close pattern. NEVER save the active document directly in Photoshop 2022+.
     1. Duplicate the document.
     2. ${flattenInstruction}
-    3. Save the duplicate using: \`dupDoc.saveAs(saveFile, tiffSaveOptions, true, Extension.LOWERCASE);\`
-    4. Close the duplicate without saving changes.
-*   **Save Options:** Create a \`TiffSaveOptions\` object and set the base properties.
-    *   ${transparencyOpt}
-    *   If layers should be preserved (\`${!flattenTiff}\`) AND the document has more than one layer, set \`tiffSaveOptions.layers = true;\`.
-    *   If transparency should be preserved (\`${preserveTiffTransparency}\`) AND the document has alpha channels, set \`tiffSaveOptions.alphaChannels = true;\`.
+    3. Create \`var tiffSaveOptions = new TiffSaveOptions();\`. Set these properties:
+       - \`tiffSaveOptions.imageCompression = TIFFEncoding.${compressionConstant};\`
+       - \`${transparencyOpt}\`
+       - If layers should be preserved (\`${!flattenTiff}\`) AND \`dupDoc.layers.length > 1\`, set \`tiffSaveOptions.layers = true;\`.
+       - If transparency should be preserved (\`${preserveTiffTransparency}\`) AND the document has alpha channels, set \`tiffSaveOptions.alphaChannels = true;\`.
+    4. Save: \`dupDoc.saveAs(saveFile, tiffSaveOptions, true, Extension.LOWERCASE);\`
+    5. Close the duplicate without saving changes.
 `;
         break;
     case SaveFormat.PSD:
