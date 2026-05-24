@@ -379,50 +379,32 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
           5. Close the duplicate without saving changes.`;
       }
       break;
-    case SaveFormat.TIFF:
+    case SaveFormat.TIFF: {
         const compression = tiffCompression || 'LZW';
         const compressionConstant = { 'NONE': 'NONE', 'LZW': 'LZW', 'ZIP': 'TIFFZIP' }[compression];
         const preserveTiffTransparency = tiffTransparency;
         const flattenTiff = !psdTiffLayers;
 
-        // Helper text for handling transparency vs flattening (always operates on dupDoc, never doc)
         const flattenInstruction = preserveTiffTransparency
-            ? "On the duplicate: check layer count: \`if (dupDoc.layers.length > 1) { dupDoc.mergeVisibleLayers(); }\`. Then ensure transparency is supported — wrap in try-catch as it can throw in PS 2024+: \`try { if (dupDoc.activeLayer.isBackgroundLayer) { dupDoc.activeLayer.isBackgroundLayer = false; } } catch(e) {}\`. DO NOT call \`dupDoc.flatten()\`."
-            : "Flatten the duplicate: \`dupDoc.flatten();\`";
+            ? `Check layer count and merge if needed: \`if (dupDoc.layers.length > 1) { dupDoc.mergeVisibleLayers(); }\`. Then ensure the layer supports transparency — wrap in try-catch (can throw in PS 2024+): \`try { if (dupDoc.activeLayer.isBackgroundLayer) { dupDoc.activeLayer.isBackgroundLayer = false; } } catch(e) {}\`. DO NOT call \`dupDoc.flatten()\`.`
+            : `Flatten the duplicate: \`dupDoc.flatten();\``;
 
-        const transparencyOpt = preserveTiffTransparency ? "tiffSaveOptions.transparency = true;" : "tiffSaveOptions.transparency = false;";
-
-        desc += `Use ${compression} compression. `;
-        desc += `To prevent errors, you MUST generate a strict 'if/else' block to handle CMYK documents separately.
-
-**PATH 1: \`if (doc.mode === DocumentMode.CMYK)\`**
-This logic is for CMYK files ONLY.
-*   **Procedure:**
-    1. Duplicate the document.
+        desc += `Use ${compression} compression. Use this exact process — NO if/else on color mode, this single path handles all color modes:
+    1. Duplicate the document: \`var dupDoc = doc.duplicate();\`
     2. ${flattenInstruction}
-    3. Create a \`TiffSaveOptions\` object. Set ONLY these properties:
-       - \`tiffSaveOptions.imageCompression = TIFFEncoding.${compressionConstant};\`
-       - \`tiffSaveOptions.byteOrder = ByteOrder.IBM;\`
-       - \`tiffSaveOptions.embedColorProfile = true;\`
-       - \`${transparencyOpt}\`
+    3. Create save options:
+       \`var tiffSaveOptions = new TiffSaveOptions();\`
+       \`tiffSaveOptions.imageCompression = TIFFEncoding.${compressionConstant};\`
+       \`tiffSaveOptions.byteOrder = ByteOrder.IBM;\`
+       \`tiffSaveOptions.embedColorProfile = true;\`
+       \`${preserveTiffTransparency ? 'tiffSaveOptions.transparency = true;' : 'tiffSaveOptions.transparency = false;'}\`
+       ONLY if the document is NOT CMYK AND layers should be preserved (${!flattenTiff}): \`if (dupDoc.mode !== DocumentMode.CMYK && dupDoc.layers.length > 1) { tiffSaveOptions.layers = true; }\`
+       ONLY if the document is NOT CMYK AND transparency is preserved (${preserveTiffTransparency}): \`if (dupDoc.mode !== DocumentMode.CMYK) { tiffSaveOptions.alphaChannels = true; }\`
     4. Save: \`dupDoc.saveAs(saveFile, tiffSaveOptions, true, Extension.LOWERCASE);\`
-    5. Close the duplicate without saving changes.
-*   **CRITICAL:** DO NOT add options for \`layers\` or \`alphaChannels\` for CMYK unless absolutely necessary.
-
-**PATH 2: \`else\` (for all other color modes like RGB)**
-This logic is for non-CMYK files.
-*   **Procedure:** ALWAYS use the duplicate-save-close pattern. NEVER save the active document directly in Photoshop 2022+.
-    1. Duplicate the document.
-    2. ${flattenInstruction}
-    3. Create \`var tiffSaveOptions = new TiffSaveOptions();\`. Set these properties:
-       - \`tiffSaveOptions.imageCompression = TIFFEncoding.${compressionConstant};\`
-       - \`${transparencyOpt}\`
-       - If layers should be preserved (\`${!flattenTiff}\`) AND \`dupDoc.layers.length > 1\`, set \`tiffSaveOptions.layers = true;\`.
-       - If transparency should be preserved (\`${preserveTiffTransparency}\`) AND the document has alpha channels, set \`tiffSaveOptions.alphaChannels = true;\`.
-    4. Save: \`dupDoc.saveAs(saveFile, tiffSaveOptions, true, Extension.LOWERCASE);\`
-    5. Close the duplicate without saving changes.
+    5. Close the duplicate: \`dupDoc.close(SaveOptions.DONOTSAVECHANGES);\`
 `;
         break;
+    }
     case SaveFormat.PSD:
       desc += 'Save as a standard PSD file. ';
       if (psdTiffLayers) {
