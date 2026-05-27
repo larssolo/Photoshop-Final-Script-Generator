@@ -19,8 +19,8 @@ function getClient(): Anthropic {
 
 const buildScriptPreamble = () => `
 Generate a comprehensive and robust Adobe Photoshop script using JavaScript (ExtendScript),
-targeting Photoshop 2022-2025 (v23-v26+). The script must use modern ExtendScript API patterns
-that are fully compatible with the latest versions of Photoshop.
+targeting Photoshop 2022-2026 (v23-v27+). The script must use modern ExtendScript API patterns
+that are fully compatible with the latest versions of Photoshop, including Photoshop 2026 (v27).
 `;
 
 const buildBestPracticesSection = () => `
@@ -531,13 +531,15 @@ ${buildScriptCleanupSection()}
   console.log("Generated Prompt for Claude:", fullPrompt);
 
   try {
-    const response = await getClient().messages.create({
+    const stream = getClient().messages.stream({
       model: 'claude-opus-4-7',
-      max_tokens: 16000,
+      max_tokens: 32000,
       messages: [{ role: 'user', content: fullPrompt }],
     });
+    const response = await stream.finalMessage();
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const textBlock = response.content.find(b => b.type === 'text');
+    const text = textBlock && textBlock.type === 'text' ? textBlock.text : '';
     const codeBlockMatch = text.match(/```(?:javascript|jsx?|extendscript)\n([\s\S]*?)```/);
 
     let script: string;
