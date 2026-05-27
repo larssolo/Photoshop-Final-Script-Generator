@@ -5,33 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Photoshop Script Generator</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              'brand-blue': '#2d7ff9',
-              'brand-dark': '#1a1a1a',
-              'brand-light': '#f0f4f8',
-              'brand-gray': {
-                100: '#e1e1e1',
-                200: '#c4c4c4',
-                300: '#a6a6a6',
-                400: '#898989',
-                500: '#6b6b6b',
-                600: '#4d4d4d',
-                700: '#303030',
-                800: '#212121',
-                900: '#121212',
-              },
-            },
-          },
-        },
-      };
-    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/tailwind.css">
   </head>
-  <body class="bg-brand-dark text-brand-light">
+  <body class="bg-brand-dark text-brand-light font-sans">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
