@@ -1,7 +1,7 @@
 
 import React, { useCallback, useRef, useState } from 'react';
 import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ConditionAction, TrimAction, FlattenAction, MetadataAction } from './types';
-import { generateScriptPrompt, parseScriptToActions } from './services/geminiService';
+import { generateScriptPrompt, parseScriptToActions } from './services/aiService';
 import Header from './components/Header';
 import ActionStep from './components/ActionStep';
 import ResizeModal from './components/modals/ResizeModal';
@@ -15,22 +15,39 @@ import FlattenModal from './components/modals/FlattenModal';
 import MetadataModal from './components/modals/MetadataModal';
 import CodeBlock from './components/CodeBlock';
 import UserGuide from './components/UserGuide';
-import { PlusIcon, SparklesIcon, DownloadIcon, BranchIcon, ScissorsIcon, FlattenIcon, MetadataIcon } from './components/icons/Icons';
+import { SparklesIcon, DownloadIcon, BranchIcon, ScissorsIcon, FlattenIcon, MetadataIcon, ResizeIcon, SaveIcon, FolderIcon, RotateIcon, ColorSwatchIcon } from './components/icons/Icons';
 import { useAppState, useAppDispatch } from './state/AppContext';
 
+// ─── Action button definitions ───────────────────────────────────────────────
+const ACTION_BUTTONS = [
+  { key: 'resize',        label: 'Resize',       Icon: ResizeIcon,      color: 'blue'   },
+  { key: 'save',          label: 'Save',         Icon: SaveIcon,        color: 'emerald'},
+  { key: 'create-folder', label: 'Folder',       Icon: FolderIcon,      color: 'purple' },
+  { key: 'rotate',        label: 'Rotate',       Icon: RotateIcon,      color: 'yellow' },
+  { key: 'trim',          label: 'Trim',         Icon: ScissorsIcon,    color: 'orange' },
+  { key: 'color-mode',    label: 'Color Mode',   Icon: ColorSwatchIcon, color: 'pink'   },
+  { key: 'condition',     label: 'Condition',    Icon: BranchIcon,      color: 'teal'   },
+  { key: 'flatten',       label: 'Flatten',      Icon: FlattenIcon,     color: 'cyan'   },
+] as const;
+
+const colorMap: Record<string, string> = {
+  blue:    'bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 hover:text-blue-200 border-blue-500/20 hover:border-blue-400/50 hover:shadow-blue-500/10',
+  emerald: 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 hover:text-emerald-200 border-emerald-500/20 hover:border-emerald-400/50 hover:shadow-emerald-500/10',
+  purple:  'bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 hover:text-purple-200 border-purple-500/20 hover:border-purple-400/50 hover:shadow-purple-500/10',
+  yellow:  'bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300 hover:text-yellow-200 border-yellow-500/20 hover:border-yellow-400/50 hover:shadow-yellow-500/10',
+  orange:  'bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 hover:text-orange-200 border-orange-500/20 hover:border-orange-400/50 hover:shadow-orange-500/10',
+  pink:    'bg-pink-500/10 hover:bg-pink-500/20 text-pink-300 hover:text-pink-200 border-pink-500/20 hover:border-pink-400/50 hover:shadow-pink-500/10',
+  teal:    'bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 hover:text-teal-200 border-teal-500/20 hover:border-teal-400/50 hover:shadow-teal-500/10',
+  cyan:    'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 hover:text-cyan-200 border-cyan-500/20 hover:border-cyan-400/50 hover:shadow-cyan-500/10',
+  violet:  'bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 hover:text-violet-200 border-violet-500/20 hover:border-violet-400/50 hover:shadow-violet-500/10',
+};
+
+const btnBase = 'flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-medium text-sm border transition-all duration-150 active:scale-95 hover:-translate-y-px hover:shadow-lg';
+
+
 const App: React.FC = () => {
-  const { 
-    actions, 
-    outputFolderName,
-    generatedScript,
-    isLoading,
-    loadingMessage,
-    error,
-    modal 
-  } = useAppState();
+  const { actions, outputFolderName, generatedScript, isLoading, loadingMessage, error, modal } = useAppState();
   const dispatch = useAppDispatch();
-  
-  // Import file refs
   const importScriptRef = useRef<HTMLInputElement>(null);
 
   const handleAddAction = (newAction: Action, parentId?: string) => {
@@ -41,37 +58,25 @@ const App: React.FC = () => {
     }
   };
 
-  const handleEditAction = (id: string) => {
-    dispatch({ type: 'OPEN_MODAL_FOR_EDIT', payload: id });
-  };
+  const handleEditAction = (id: string) => dispatch({ type: 'OPEN_MODAL_FOR_EDIT', payload: id });
+  const handleDeleteAction = (id: string) => dispatch({ type: 'DELETE_ACTION', payload: id });
 
-  const handleDeleteAction = (id: string) => {
-    dispatch({ type: 'DELETE_ACTION', payload: id });
-  };
-  
   const handleGenerateScript = useCallback(async () => {
     if (actions.length === 0) {
-      dispatch({ type: 'SET_ERROR', payload: 'Please add at least one step before generating the script.' });
+      dispatch({ type: 'SET_ERROR', payload: 'Add at least one step before generating.' });
       return;
     }
     if (!outputFolderName) {
-      dispatch({ type: 'SET_ERROR', payload: 'Please provide a name for the output folder.' });
+      dispatch({ type: 'SET_ERROR', payload: 'Provide a name for the output folder.' });
       return;
     }
-
-    dispatch({ type: 'SET_LOADING', payload: { isLoading: true, message: 'Generating...' } });
+    dispatch({ type: 'SET_LOADING', payload: { isLoading: true, message: 'Generating script…' } });
     dispatch({ type: 'SET_GENERATED_SCRIPT', payload: '' });
-
     try {
       const script = await generateScriptPrompt(actions, outputFolderName);
       dispatch({ type: 'SET_GENERATED_SCRIPT', payload: script });
     } catch (e) {
-      console.error(e);
-      if (e instanceof Error) {
-        dispatch({ type: 'SET_ERROR', payload: e.message });
-      } else {
-        dispatch({ type: 'SET_ERROR', payload: 'An error occurred while generating the script. Please try again.' });
-      }
+      dispatch({ type: 'SET_ERROR', payload: e instanceof Error ? e.message : 'An error occurred. Please try again.' });
     } finally {
       dispatch({ type: 'SET_LOADING', payload: { isLoading: false } });
     }
@@ -103,32 +108,21 @@ const App: React.FC = () => {
     return relY < 0.5 ? 'before' : 'after';
   };
 
-  const handleDragStart = (action: Action) => {
-    dragItem.current = action;
-  };
-
-  const handleDragEnd = () => {
-    dragItem.current = null;
-    setDropIndicator(null);
-  };
+  const handleDragStart = (action: Action) => { dragItem.current = action; };
+  const handleDragEnd = () => { dragItem.current = null; setDropIndicator(null); };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>, action: Action) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     if (!dragItem.current || dragItem.current.id === action.id) return;
     if (isDescendant(dragItem.current, action.id)) return;
     const position = getDropPosition(e, isContainerType(action.type));
-    setDropIndicator(prev =>
-      prev?.id === action.id && prev?.position === position ? prev : { id: action.id, position }
-    );
+    setDropIndicator(prev => prev?.id === action.id && prev?.position === position ? prev : { id: action.id, position });
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, action: Action) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     const dragged = dragItem.current;
-    dragItem.current = null;
-    setDropIndicator(null);
+    dragItem.current = null; setDropIndicator(null);
     if (!dragged || dragged.id === action.id) return;
     if (isDescendant(dragged, action.id)) return;
     const position = getDropPosition(e, isContainerType(action.type));
@@ -136,337 +130,270 @@ const App: React.FC = () => {
   };
 
   const handleDropZoneOver = (e: React.DragEvent<HTMLDivElement>, containerId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     if (!dragItem.current) return;
-    setDropIndicator(prev =>
-      prev?.id === containerId && prev?.position === 'inside' ? prev : { id: containerId, position: 'inside' }
-    );
+    setDropIndicator(prev => prev?.id === containerId && prev?.position === 'inside' ? prev : { id: containerId, position: 'inside' });
   };
 
   const handleDropZoneDrop = (e: React.DragEvent<HTMLDivElement>, containerId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     const dragged = dragItem.current;
-    dragItem.current = null;
-    setDropIndicator(null);
+    dragItem.current = null; setDropIndicator(null);
     if (!dragged) return;
     dispatch({ type: 'MOVE_ACTION', payload: { draggedId: dragged.id, targetId: containerId, position: 'inside' } });
   };
-
 
   const handleDownloadScript = () => {
     if (!generatedScript) return;
     const blob = new Blob([generatedScript], { type: 'text/javascript' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = 'photoshop-script.jsx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleTriggerImportScript = () => {
-    importScriptRef.current?.click();
+    a.href = url; a.download = 'photoshop-script.jsx';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
   const handleImportScript = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = async (e) => {
-        const content = e.target?.result as string;
-        if (!content) {
-            dispatch({ type: 'SET_ERROR', payload: 'Could not read the file.' });
-            return;
-        }
-
-        dispatch({ type: 'SET_LOADING', payload: { isLoading: true, message: 'Analyzing script...' } });
-
-        try {
-            const parsedData = await parseScriptToActions(content);
-            dispatch({
-                type: 'LOAD_IMPORTED_DATA',
-                payload: {
-                    actions: parsedData.actions,
-                    outputFolderName: parsedData.outputFolderName,
-                    script: content,
-                }
-            });
-        } catch (err) {
-            console.error(err);
-            if (err instanceof Error) {
-                dispatch({ type: 'SET_ERROR', payload: err.message });
-            } else {
-                dispatch({ type: 'SET_ERROR', payload: 'An unknown error occurred during import. Please try again.' });
-            }
-        } finally {
-            dispatch({ type: 'SET_LOADING', payload: { isLoading: false } });
-        }
+      const content = e.target?.result as string;
+      if (!content) { dispatch({ type: 'SET_ERROR', payload: 'Could not read file.' }); return; }
+      dispatch({ type: 'SET_LOADING', payload: { isLoading: true, message: 'Analyzing script…' } });
+      try {
+        const parsedData = await parseScriptToActions(content);
+        dispatch({ type: 'LOAD_IMPORTED_DATA', payload: { actions: parsedData.actions, outputFolderName: parsedData.outputFolderName, script: content } });
+      } catch (err) {
+        dispatch({ type: 'SET_ERROR', payload: err instanceof Error ? err.message : 'Import failed. Please try again.' });
+      } finally {
+        dispatch({ type: 'SET_LOADING', payload: { isLoading: false } });
+      }
     };
-    reader.onerror = () => {
-        dispatch({ type: 'SET_ERROR', payload: 'Error reading file.' });
-    };
+    reader.onerror = () => dispatch({ type: 'SET_ERROR', payload: 'Error reading file.' });
     reader.readAsText(file);
-
     event.target.value = '';
   };
-  
+
   const findActionById = (actions: Action[], id: string): Action | undefined => {
     for (const action of actions) {
-        if (action.id === id) return action;
-        if (action.type === ActionType.CONDITION || action.type === ActionType.CREATE_FOLDER || action.type === ActionType.TRIM) {
-            const found = findActionById(action.then, id);
-            if (found) return found;
-        }
+      if (action.id === id) return action;
+      if (isContainerType(action.type)) {
+        const found = findActionById((action as any).then, id);
+        if (found) return found;
+      }
     }
     return undefined;
   };
 
   const currentAction = modal.editingId ? findActionById(actions, modal.editingId) : undefined;
-  
-  const renderActions = (actionList: Action[], level = 0) => {
-    return actionList.map((action) => {
-      const isContainer = action.type === ActionType.CONDITION || action.type === ActionType.CREATE_FOLDER || action.type === ActionType.TRIM;
-      return (
-        <ActionStep
-          key={action.id}
-          action={action}
-          onEdit={() => handleEditAction(action.id)}
-          onDelete={() => handleDeleteAction(action.id)}
-          onDragStart={() => handleDragStart(action)}
-          onDragOver={(e) => handleDragOver(e, action)}
-          onDrop={(e) => handleDrop(e, action)}
-          onDropZoneOver={isContainer ? (e) => handleDropZoneOver(e, action.id) : undefined}
-          onDropZoneDrop={isContainer ? (e) => handleDropZoneDrop(e, action.id) : undefined}
-          onDragEnd={handleDragEnd}
-          dropIndicator={dropIndicator?.id === action.id ? dropIndicator.position : null}
-          level={level}
-        >
-          {isContainer && action.then && renderActions(action.then, level + 1)}
-        </ActionStep>
-      );
-    });
-  };
 
+  const renderActions = (actionList: Action[], level = 0) => actionList.map((action) => {
+    const isContainer = isContainerType(action.type);
+    return (
+      <ActionStep
+        key={action.id} action={action}
+        onEdit={() => handleEditAction(action.id)}
+        onDelete={() => handleDeleteAction(action.id)}
+        onDragStart={() => handleDragStart(action)}
+        onDragOver={(e) => handleDragOver(e, action)}
+        onDrop={(e) => handleDrop(e, action)}
+        onDropZoneOver={isContainer ? (e) => handleDropZoneOver(e, action.id) : undefined}
+        onDropZoneDrop={isContainer ? (e) => handleDropZoneDrop(e, action.id) : undefined}
+        onDragEnd={handleDragEnd}
+        dropIndicator={dropIndicator?.id === action.id ? dropIndicator.position : null}
+        level={level}
+      >
+        {isContainer && (action as any).then && renderActions((action as any).then, level + 1)}
+      </ActionStep>
+    );
+  });
 
   return (
-    <div className="min-h-screen bg-brand-gray-900 font-sans">
-      <Header onImportClick={handleTriggerImportScript} />
-      <main className="container mx-auto p-4 md:p-8">
-      <input type="file" ref={importScriptRef} onChange={handleImportScript} accept=".jsx" className="hidden" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
-          {/* Left Panel: Builder */}
-          <div className="bg-brand-gray-800 rounded-lg p-6 shadow-lg border border-brand-gray-700">
-            <h2 className="text-2xl font-bold mb-4 text-white">Script Builder</h2>
-            <p className="text-brand-gray-300 mb-6">Add and configure steps for your batch script.</p>
-            
-            <div className="mb-6">
-                <label htmlFor="outputFolder" className="block text-sm font-medium text-brand-gray-300 mb-2">
-                    Output Folder Name
+    <div className="min-h-screen bg-brand-dark font-sans">
+      <Header onImportClick={() => importScriptRef.current?.click()} />
+
+      <main className="container mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
+        <input type="file" ref={importScriptRef} onChange={handleImportScript} accept=".jsx" className="hidden" />
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          {/* ── LEFT PANEL: Builder ─────────────────────────────────────── */}
+          <div className="panel-surface rounded-2xl border border-brand-gray-700/50 shadow-2xl shadow-black/40 flex flex-col">
+
+            {/* Panel header */}
+            <div className="px-6 pt-6 pb-4 border-b border-brand-gray-700/40">
+              <h2 className="text-lg font-semibold text-white tracking-tight">Script Builder</h2>
+              <p className="text-sm text-brand-gray-400 mt-0.5">Configure the steps for your batch workflow.</p>
+            </div>
+
+            <div className="px-6 py-5 flex flex-col gap-5 flex-1">
+
+              {/* Output folder */}
+              <div>
+                <label htmlFor="outputFolder" className="block text-xs font-semibold text-brand-gray-400 uppercase tracking-wider mb-2">
+                  Output Folder Name
                 </label>
                 <input
-                    id="outputFolder"
-                    type="text"
-                    value={outputFolderName}
-                    onChange={(e) => dispatch({ type: 'SET_OUTPUT_FOLDER_NAME', payload: e.target.value })}
-                    className="w-full bg-brand-gray-900 border border-brand-gray-600 rounded-md p-2 text-white focus:ring-brand-blue focus:border-brand-blue"
-                    placeholder="e.g., ProcessedImages"
+                  id="outputFolder"
+                  type="text"
+                  value={outputFolderName}
+                  onChange={(e) => dispatch({ type: 'SET_OUTPUT_FOLDER_NAME', payload: e.target.value })}
+                  className="w-full bg-brand-gray-900 border border-brand-gray-700/60 rounded-xl px-4 py-2.5 text-white text-sm placeholder:text-brand-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-blue/40 focus:border-brand-blue/60 transition-all duration-150"
+                  placeholder="e.g., ProcessedImages"
                 />
-                <p className="text-xs text-brand-gray-400 mt-2">This is the name of the main folder where all saved files will be placed.</p>
-            </div>
-            <div className="border-t border-brand-gray-700 mb-6"></div>
+                <p className="text-xs text-brand-gray-600 mt-1.5">Main folder where all saved files will be placed.</p>
+              </div>
 
-            <div className="flex flex-col gap-2">
-              {actions.length > 0 ? (
-                renderActions(actions)
-              ) : (
-                <div className="text-center py-10 border-2 border-dashed border-brand-gray-600 rounded-lg">
-                  <p className="text-brand-gray-400">Your script steps will appear here.</p>
-                  <p className="text-brand-gray-500 text-sm">Start by adding a step or importing a script.</p>
+              {/* Action list */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-xs font-semibold text-brand-gray-400 uppercase tracking-wider">
+                    Steps
+                    {actions.length > 0 && (
+                      <span className="ml-2 bg-brand-gray-700 text-brand-gray-300 text-xs px-2 py-0.5 rounded-full font-normal normal-case tracking-normal">
+                        {actions.length}
+                      </span>
+                    )}
+                  </label>
                 </div>
-              )}
-            </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
-              <button 
-                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'resize' })}
-                className="flex items-center justify-center gap-2 bg-brand-blue hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
-              >
-                <PlusIcon /> Resize
-              </button>
-              <button 
-                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'save' })}
-                className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
-              >
-                <PlusIcon /> Save
-              </button>
-               <button 
-                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'create-folder' })}
-                className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
-              >
-                <PlusIcon /> Folder
-              </button>
-               <button 
-                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'rotate' })}
-                className="flex items-center justify-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
-              >
-                <PlusIcon /> Rotate
-              </button>
-               <button 
-                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'trim' })}
-                className="flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
-              >
-                <ScissorsIcon /> Trim
-              </button>
-              <button 
-                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'color-mode' })}
-                className="flex items-center justify-center gap-2 bg-pink-600 hover:bg-pink-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
-              >
-                <PlusIcon /> Color Mode
-              </button>
-               <button
-                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'condition' })}
-                className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
-              >
-                <BranchIcon /> Condition
-              </button>
-               <button
-                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'flatten' })}
-                className="flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
-              >
-                <FlattenIcon /> Flatten
-              </button>
-               <button
-                onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'metadata' })}
-                className="flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 col-span-2 lg:col-span-3"
-              >
-                <MetadataIcon /> Metadata &amp; Rename
-              </button>
-            </div>
-            
-            <div className="mt-8 border-t border-brand-gray-700 pt-6">
-               <button 
-                onClick={handleGenerateScript}
-                disabled={isLoading || actions.length === 0}
-                className="w-full flex items-center justify-center gap-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-900 disabled:text-gray-400 disabled:cursor-not-allowed text-white font-bold py-4 px-4 rounded-lg text-lg transition-all duration-200 transform hover:scale-105"
-              >
-                <SparklesIcon /> {isLoading ? loadingMessage : 'Generate Script'}
-              </button>
-              {error && <p className="text-red-400 mt-4 text-center">{error}</p>}
-            </div>
+                {actions.length > 0 ? (
+                  <div className="flex flex-col gap-1.5">
+                    {renderActions(actions)}
+                  </div>
+                ) : (
+                  <div className="text-center py-10 border border-dashed border-brand-gray-700/60 rounded-xl bg-brand-gray-900/30">
+                    <div className="w-10 h-10 bg-brand-gray-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <svg className="w-5 h-5 text-brand-gray-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-brand-gray-400 font-medium">No steps yet</p>
+                    <p className="text-xs text-brand-gray-600 mt-1">Add steps using the buttons below.</p>
+                  </div>
+                )}
+              </div>
 
+              {/* Add-action buttons */}
+              <div>
+                <label className="block text-xs font-semibold text-brand-gray-400 uppercase tracking-wider mb-3">
+                  Add Step
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {ACTION_BUTTONS.map(({ key, label, Icon, color }) => (
+                    <button
+                      key={key}
+                      onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: key })}
+                      className={`${btnBase} ${colorMap[color]}`}
+                    >
+                      <Icon className="w-4 h-4 flex-shrink-0" />
+                      <span className="truncate">{label}</span>
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => dispatch({ type: 'OPEN_MODAL_FOR_CREATE', payload: 'metadata' })}
+                    className={`${btnBase} ${colorMap['violet']} col-span-2 sm:col-span-3 lg:col-span-4`}
+                  >
+                    <MetadataIcon className="w-4 h-4 flex-shrink-0" />
+                    <span>Metadata &amp; Rename</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Generate button */}
+              <div className="pt-1">
+                <button
+                  onClick={handleGenerateScript}
+                  disabled={isLoading || actions.length === 0}
+                  className={`w-full flex items-center justify-center gap-2.5 font-semibold py-3.5 px-6 rounded-xl text-white text-base transition-all duration-200 active:scale-[0.98] ${
+                    isLoading
+                      ? 'shimmer-btn cursor-wait'
+                      : actions.length === 0
+                        ? 'bg-brand-gray-800 text-brand-gray-600 cursor-not-allowed border border-brand-gray-700/50'
+                        : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 shadow-lg shadow-indigo-900/50 hover:shadow-indigo-700/40 hover:-translate-y-px'
+                  }`}
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin flex-shrink-0" />
+                      {loadingMessage ?? 'Generating…'}
+                    </>
+                  ) : (
+                    <>
+                      <SparklesIcon className="w-5 h-5 flex-shrink-0" />
+                      Generate Script
+                    </>
+                  )}
+                </button>
+
+                {error && (
+                  <div className="mt-3 flex items-start gap-2.5 bg-red-500/8 border border-red-500/20 rounded-xl px-4 py-3">
+                    <svg className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                    </svg>
+                    <p className="text-sm text-red-300">{error}</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Right Panel: Output */}
-          <div className="bg-brand-gray-800 rounded-lg p-6 shadow-lg border border-brand-gray-700 flex flex-col">
-             <h2 className="text-2xl font-bold mb-4 text-white">
-                {generatedScript || isLoading ? 'Generated Script (ExtendScript)' : 'User Guide'}
-             </h2>
-             <div className={generatedScript || isLoading ? '' : 'flex-grow'}>
-               {generatedScript || isLoading ? (
-                 <CodeBlock script={generatedScript} isLoading={isLoading} loadingMessage={loadingMessage}/>
-               ) : (
-                 <UserGuide />
-               )}
-             </div>
-             {generatedScript && !isLoading && (
-               <div className="mt-4">
-                 <button 
-                   onClick={handleDownloadScript}
-                   className="w-full flex items-center justify-center gap-2 bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200"
-                 >
-                   <DownloadIcon /> Download .jsx file
-                 </button>
-               </div>
-             )}
+          {/* ── RIGHT PANEL: Output ─────────────────────────────────────── */}
+          <div className="panel-surface rounded-2xl border border-brand-gray-700/50 shadow-2xl shadow-black/40 flex flex-col">
+
+            {/* Panel header */}
+            <div className="px-6 pt-6 pb-4 border-b border-brand-gray-700/40">
+              <h2 className="text-lg font-semibold text-white tracking-tight">
+                {generatedScript || isLoading ? 'Generated Script' : 'User Guide'}
+              </h2>
+              <p className="text-sm text-brand-gray-400 mt-0.5">
+                {generatedScript || isLoading ? 'ExtendScript (.jsx) ready for Photoshop.' : 'How to use the Script Generator.'}
+              </p>
+            </div>
+
+            <div className="px-6 py-5 flex flex-col flex-1 gap-4">
+              <div className="flex-1">
+                {generatedScript || isLoading ? (
+                  <CodeBlock script={generatedScript} isLoading={isLoading} loadingMessage={loadingMessage} />
+                ) : (
+                  <UserGuide />
+                )}
+              </div>
+
+              {generatedScript && !isLoading && (
+                <button
+                  onClick={handleDownloadScript}
+                  className="w-full flex items-center justify-center gap-2 bg-brand-gray-700/60 hover:bg-brand-gray-700 text-brand-gray-200 hover:text-white font-medium py-3 px-4 rounded-xl border border-brand-gray-600/40 hover:border-brand-gray-500/70 transition-all duration-150 active:scale-[0.98] text-sm hover:-translate-y-px hover:shadow-lg hover:shadow-black/20"
+                >
+                  <DownloadIcon className="w-4 h-4" />
+                  Download .jsx file
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </main>
 
-      <footer className="border-t border-brand-gray-700 mt-8 py-5 text-center">
-        <p className="text-sm text-brand-gray-500">
-          Built in collaboration with Claude Anthropic, Google Gemini &amp;{' '}
-          <a href="https://www.larssohl.dk" target="_blank" rel="noopener noreferrer" className="hover:text-brand-gray-300 transition-colors underline underline-offset-2">www.larssohl.dk</a>
+      <footer className="border-t border-brand-gray-800 mt-6 py-5 text-center">
+        <p className="text-xs text-brand-gray-600">
+          Built with Claude Anthropic &amp;{' '}
+          <a href="https://www.larssohl.dk" target="_blank" rel="noopener noreferrer" className="hover:text-brand-gray-400 transition-colors underline underline-offset-2">
+            www.larssohl.dk
+          </a>
         </p>
       </footer>
 
-      {modal.type === 'resize' && (
-        <ResizeModal 
-          isOpen={true} 
-          onClose={() => dispatch({ type: 'CLOSE_MODALS' })} 
-          onSave={handleAddAction}
-          existingAction={currentAction as ResizeAction | undefined}
-        />
-      )}
-      {modal.type === 'save' && (
-        <SaveModal 
-          isOpen={true}
-          onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
-          onSave={handleAddAction}
-          existingAction={currentAction as SaveAction | undefined}
-        />
-      )}
-      {modal.type === 'create-folder' && (
-        <CreateFolderModal
-          isOpen={true}
-          onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
-          onSave={handleAddAction}
-          existingAction={currentAction as CreateFolderAction | undefined}
-        />
-      )}
-      {modal.type === 'rotate' && (
-        <RotateModal
-          isOpen={true}
-          onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
-          onSave={handleAddAction}
-          existingAction={currentAction as RotateAction | undefined}
-        />
-      )}
-       {modal.type === 'color-mode' && (
-        <ColorModeModal
-          isOpen={true}
-          onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
-          onSave={handleAddAction}
-          existingAction={currentAction as ColorModeAction | undefined}
-        />
-      )}
-      {modal.type === 'condition' && (
-        <ConditionModal
-          isOpen={true}
-          onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
-          onSave={handleAddAction}
-          existingAction={currentAction as ConditionAction | undefined}
-        />
-      )}
-      {modal.type === 'trim' && (
-        <TrimModal
-          isOpen={true}
-          onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
-          onSave={handleAddAction}
-          existingAction={currentAction as TrimAction | undefined}
-        />
-      )}
-      {modal.type === 'flatten' && (
-        <FlattenModal
-          isOpen={true}
-          onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
-          onSave={handleAddAction}
-          existingAction={currentAction as FlattenAction | undefined}
-        />
-      )}
-      {modal.type === 'metadata' && (
-        <MetadataModal
-          isOpen={true}
-          onClose={() => dispatch({ type: 'CLOSE_MODALS' })}
-          onSave={handleAddAction}
-          existingAction={currentAction as MetadataAction | undefined}
-        />
-      )}
+      {/* ── Modals ──────────────────────────────────────────────────────── */}
+      {modal.type === 'resize' && <ResizeModal isOpen onClose={() => dispatch({ type: 'CLOSE_MODALS' })} onSave={handleAddAction} existingAction={currentAction as ResizeAction | undefined} />}
+      {modal.type === 'save' && <SaveModal isOpen onClose={() => dispatch({ type: 'CLOSE_MODALS' })} onSave={handleAddAction} existingAction={currentAction as SaveAction | undefined} />}
+      {modal.type === 'create-folder' && <CreateFolderModal isOpen onClose={() => dispatch({ type: 'CLOSE_MODALS' })} onSave={handleAddAction} existingAction={currentAction as CreateFolderAction | undefined} />}
+      {modal.type === 'rotate' && <RotateModal isOpen onClose={() => dispatch({ type: 'CLOSE_MODALS' })} onSave={handleAddAction} existingAction={currentAction as RotateAction | undefined} />}
+      {modal.type === 'color-mode' && <ColorModeModal isOpen onClose={() => dispatch({ type: 'CLOSE_MODALS' })} onSave={handleAddAction} existingAction={currentAction as ColorModeAction | undefined} />}
+      {modal.type === 'condition' && <ConditionModal isOpen onClose={() => dispatch({ type: 'CLOSE_MODALS' })} onSave={handleAddAction} existingAction={currentAction as ConditionAction | undefined} />}
+      {modal.type === 'trim' && <TrimModal isOpen onClose={() => dispatch({ type: 'CLOSE_MODALS' })} onSave={handleAddAction} existingAction={currentAction as TrimAction | undefined} />}
+      {modal.type === 'flatten' && <FlattenModal isOpen onClose={() => dispatch({ type: 'CLOSE_MODALS' })} onSave={handleAddAction} existingAction={currentAction as FlattenAction | undefined} />}
+      {modal.type === 'metadata' && <MetadataModal isOpen onClose={() => dispatch({ type: 'CLOSE_MODALS' })} onSave={handleAddAction} existingAction={currentAction as MetadataAction | undefined} />}
     </div>
   );
 };

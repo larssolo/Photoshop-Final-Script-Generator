@@ -34,15 +34,15 @@ const getConditionText = (condition: ConditionAction['config']['condition']): st
         [ConditionOperator.IS]: 'is',
         [ConditionOperator.IS_NOT]: 'is not',
     };
-
     const value = (propMap[condition.property] === 'Width' || propMap[condition.property] === 'Height')
         ? `${condition.value}px`
         : `"${condition.value}"`;
-
     return `If ${propMap[condition.property]} ${opMap[condition.operator]} ${value}`;
 };
 
-const getActionDetails = (action: Action): { title: string; description: string; icon: React.ReactNode } => {
+type ActionMeta = { title: string; description: string; icon: React.ReactNode; accentClass: string; iconBg: string; };
+
+const getActionDetails = (action: Action): ActionMeta => {
   switch (action.type) {
     case ActionType.RESIZE: {
       const config = (action as ResizeAction).config;
@@ -50,202 +50,109 @@ const getActionDetails = (action: Action): { title: string; description: string;
       if (config.mode === ResizeMode.LONGEST_EDGE && config.length) {
         parts.push(`Longest edge: ${config.length}${config.unit}`);
       } else {
-        if (config.width) parts.push(`Width: ${config.width}${config.unit}`);
-        if (config.height) parts.push(`Height: ${config.height}${config.unit}`);
+        if (config.width) parts.push(`W: ${config.width}${config.unit}`);
+        if (config.height) parts.push(`H: ${config.height}${config.unit}`);
       }
-      if (config.resolution) parts.push(`Resolution: ${config.resolution} DPI`);
-
+      if (config.resolution) parts.push(`${config.resolution} DPI`);
       const hasSave = !!config.saveConfig || (config.saveLogic === SaveLogic.CONDITIONAL && (!!config.conditionalSaveConfig?.onRGB || !!config.conditionalSaveConfig?.onCMYK));
       const title = hasSave ? 'Resize & Save' : 'Resize Image';
-
-      let description = parts.length > 0 ? parts.join(', ') : "Configure resize details";
-
+      let description = parts.length > 0 ? parts.join(' · ') : 'Configure resize details';
       if (config.saveLogic === SaveLogic.CONDITIONAL) {
-          description += ' | Save: Conditional (RGB/CMYK)';
+        description += ' · Save: Conditional';
       } else if (config.saveConfig) {
-          const saveConfig = config.saveConfig;
-          description += ` | Save: ${saveConfig.format}`;
-          if (saveConfig.format === 'TIFF' || saveConfig.format === 'PSD') {
-              description += `, Layers: ${saveConfig.psdTiffLayers ? 'On' : 'Flattened'}`;
-          }
-          if (saveConfig.appendSuffix) {
-            description += ` ("${saveConfig.appendSuffix}")`;
-          }
-          if (saveConfig.conflictResolution && saveConfig.conflictResolution !== FileNameConflictResolution.OVERWRITE) {
-            const conflictMap: Record<string, string> = {
-                [FileNameConflictResolution.PROMPT]: 'Ask',
-                [FileNameConflictResolution.APPEND_SUFFIX]: 'Add Suffix'
-            };
-            description += `, On Conflict: ${conflictMap[saveConfig.conflictResolution]}`;
-          }
+        description += ` · Save: ${config.saveConfig.format}`;
       }
-
-      return { title, description, icon: <ResizeIcon className="w-5 h-5 text-brand-blue" /> };
+      return { title, description, icon: <ResizeIcon className="w-4 h-4" />, accentClass: 'border-l-blue-500', iconBg: 'bg-blue-500/15 text-blue-400' };
     }
     case ActionType.SAVE: {
       const config = (action as SaveAction).config;
-      let description = `Format: ${config.format}`;
-      if (config.format === 'JPEG' && config.jpegQuality) {
-        description += `, Quality: ${config.jpegQuality}`;
-      }
-       if (config.format === 'TIFF' && config.tiffTransparency !== undefined) {
-        description += `, Transparency: ${config.tiffTransparency ? 'On' : 'Off'}`;
-      }
-      if (config.format === 'TIFF' || config.format === 'PSD') {
-        description += `, Layers: ${config.psdTiffLayers ? 'On' : 'Flattened'}`;
-      }
-      if (config.appendSuffix) {
-        description += `, Suffix: "${config.appendSuffix}"`;
-      }
-      if (config.subfolder) {
-        description += `, Subfolder: "${config.subfolder}"`;
-      }
-      if (config.conflictResolution && config.conflictResolution !== FileNameConflictResolution.OVERWRITE) {
-        const conflictMap: Record<string, string> = {
-            [FileNameConflictResolution.PROMPT]: 'Ask',
-            [FileNameConflictResolution.APPEND_SUFFIX]: 'Add Suffix'
-        };
-        description += `, On Conflict: ${conflictMap[config.conflictResolution]}`;
-      }
-      return { title: 'Save Image', description, icon: <SaveIcon className="w-5 h-5 text-green-500" /> };
+      let description = `${config.format}`;
+      if (config.format === 'JPEG' && config.jpegQuality) description += ` Q${config.jpegQuality}`;
+      if (config.appendSuffix) description += ` · "${config.appendSuffix}"`;
+      if (config.subfolder) description += ` → ${config.subfolder}/`;
+      return { title: 'Save Image', description, icon: <SaveIcon className="w-4 h-4" />, accentClass: 'border-l-emerald-500', iconBg: 'bg-emerald-500/15 text-emerald-400' };
     }
     case ActionType.CREATE_FOLDER: {
       const config = (action as CreateFolderAction).config;
-      return {
-        title: 'Create Folder',
-        description: `Folder Name: "${config.folderName}"`,
-        icon: <FolderIcon className="w-5 h-5 text-purple-400" />
-      };
+      return { title: 'Create Folder', description: `"${config.folderName}"`, icon: <FolderIcon className="w-4 h-4" />, accentClass: 'border-l-purple-500', iconBg: 'bg-purple-500/15 text-purple-400' };
     }
     case ActionType.ROTATE: {
       const config = (action as RotateAction).config;
-      let rotationText = '';
-      switch (config.rotation) {
-        case RotationType.CW_90: rotationText = '90° Clockwise'; break;
-        case RotationType.CCW_90: rotationText = '90° Counter-Clockwise'; break;
-        case RotationType.DEG_180: rotationText = '180°'; break;
-      }
-      return {
-        title: 'Rotate Image',
-        description: `Rotation: ${rotationText}`,
-        icon: <RotateIcon className="w-5 h-5 text-yellow-500" />
+      const rotMap: Record<RotationType, string> = {
+        [RotationType.CW_90]: '90° Clockwise',
+        [RotationType.CCW_90]: '90° Counter-Clockwise',
+        [RotationType.DEG_180]: '180°',
       };
+      return { title: 'Rotate Image', description: rotMap[config.rotation] ?? config.rotation, icon: <RotateIcon className="w-4 h-4" />, accentClass: 'border-l-yellow-500', iconBg: 'bg-yellow-500/15 text-yellow-400' };
     }
     case ActionType.COLOR_MODE: {
       const config = (action as ColorModeAction).config;
-      return {
-        title: 'Convert Color Mode',
-        description: `Target Profile: ${config.profile}`,
-        icon: <ColorSwatchIcon className="w-5 h-5 text-pink-500" />
-      };
+      return { title: 'Convert Color Mode', description: config.profile, icon: <ColorSwatchIcon className="w-4 h-4" />, accentClass: 'border-l-pink-500', iconBg: 'bg-pink-500/15 text-pink-400' };
     }
     case ActionType.TRIM: {
-        const config = (action as TrimAction).config;
-        const basedOnMap: Record<TrimBasedOn, string> = {
-            [TrimBasedOn.TRANSPARENT_PIXELS]: 'Transparency',
-            [TrimBasedOn.TOP_LEFT_PIXEL_COLOR]: 'Top Left Color',
-            [TrimBasedOn.BOTTOM_RIGHT_PIXEL_COLOR]: 'Bottom Right Color'
-        };
-        const sides = [];
-        if (config.top) sides.push('Top');
-        if (config.bottom) sides.push('Bottom');
-        if (config.left) sides.push('Left');
-        if (config.right) sides.push('Right');
-        const sidesText = sides.length > 0 ? `(${sides.join(', ')})` : '(None)';
-        return {
-            title: 'Trim Image',
-            description: `Based on: ${basedOnMap[config.basedOn]} ${sidesText}`,
-            icon: <ScissorsIcon className="w-5 h-5 text-orange-500" />
-        };
+      const config = (action as TrimAction).config;
+      const basedOnMap: Record<TrimBasedOn, string> = {
+        [TrimBasedOn.TRANSPARENT_PIXELS]: 'Transparency',
+        [TrimBasedOn.TOP_LEFT_PIXEL_COLOR]: 'Top-Left Color',
+        [TrimBasedOn.BOTTOM_RIGHT_PIXEL_COLOR]: 'Bottom-Right Color',
+      };
+      const sides = [config.top && 'T', config.bottom && 'B', config.left && 'L', config.right && 'R'].filter(Boolean).join('');
+      return { title: 'Trim Image', description: `${basedOnMap[config.basedOn]}${sides ? ` (${sides})` : ''}`, icon: <ScissorsIcon className="w-4 h-4" />, accentClass: 'border-l-orange-500', iconBg: 'bg-orange-500/15 text-orange-400' };
     }
     case ActionType.CONDITION: {
       const config = (action as ConditionAction).config;
-      return {
-        title: 'Condition (If...Then)',
-        description: getConditionText(config.condition),
-        icon: <BranchIcon className="w-5 h-5 text-teal-400" />
-      };
+      return { title: 'Condition', description: getConditionText(config.condition), icon: <BranchIcon className="w-4 h-4" />, accentClass: 'border-l-teal-500', iconBg: 'bg-teal-500/15 text-teal-400' };
     }
     case ActionType.FLATTEN: {
       const preserveTransparency = (action as FlattenAction).config.preserveTransparency;
-      return {
-        title: 'Flatten Image',
-        description: preserveTransparency ? 'Merge Visible Layers (transparency preserved)' : 'Flatten (transparency filled with background)',
-        icon: <FlattenIcon className="w-5 h-5 text-cyan-400" />
-      };
+      return { title: 'Flatten Image', description: preserveTransparency ? 'Merge Visible (keep transparency)' : 'Full flatten', icon: <FlattenIcon className="w-4 h-4" />, accentClass: 'border-l-cyan-500', iconBg: 'bg-cyan-500/15 text-cyan-400' };
     }
     case ActionType.METADATA: {
       const cfg = (action as MetadataAction).config;
-      const metaParts: string[] = [];
-      if (cfg.title) metaParts.push('Title');
-      if (cfg.author) metaParts.push('Author');
-      if (cfg.copyright) metaParts.push('Copyright');
-      if (cfg.description) metaParts.push('Description');
-      if (cfg.keywords) metaParts.push('Keywords');
-      const renameParts: string[] = [];
-      if (cfg.stripNumericPrefix) renameParts.push(`Strip ${cfg.numericPrefixLength}-digit prefix`);
-      if (cfg.addPrefix) renameParts.push(`Prefix "${cfg.addPrefix}"`);
-      if (cfg.addSuffix) renameParts.push(`Suffix "${cfg.addSuffix}"`);
-      const parts: string[] = [];
-      if (metaParts.length > 0) parts.push(`Metadata: ${metaParts.join(', ')}`);
-      if (renameParts.length > 0) parts.push(`Rename: ${renameParts.join(', ')}`);
-      return {
-        title: 'Metadata & Rename',
-        description: parts.length > 0 ? parts.join(' | ') : 'No changes configured',
-        icon: <MetadataIcon className="w-5 h-5 text-violet-400" />
-      };
+      const metaParts = [cfg.title && 'Title', cfg.author && 'Author', cfg.copyright && 'Copyright', cfg.description && 'Desc', cfg.keywords && 'Keywords'].filter(Boolean);
+      const renameParts = [cfg.stripNumericPrefix && `Strip ${cfg.numericPrefixLength}-digit`, cfg.addPrefix && `+Prefix`, cfg.addSuffix && `+Suffix`].filter(Boolean);
+      const parts = [metaParts.length > 0 && `Meta: ${metaParts.join(', ')}`, renameParts.length > 0 && `Rename: ${renameParts.join(', ')}`].filter(Boolean);
+      return { title: 'Metadata & Rename', description: parts.length > 0 ? parts.join(' · ') : 'No changes configured', icon: <MetadataIcon className="w-4 h-4" />, accentClass: 'border-l-violet-500', iconBg: 'bg-violet-500/15 text-violet-400' };
     }
     default:
-      return { title: 'Unknown Action', description: 'Action not recognized', icon: null };
+      return { title: 'Unknown Action', description: 'Action not recognized', icon: null, accentClass: 'border-l-brand-gray-600', iconBg: 'bg-brand-gray-700 text-brand-gray-400' };
   }
 };
 
 const ActionStep: React.FC<ActionStepProps> = ({
-  action,
-  onEdit,
-  onDelete,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDropZoneOver,
-  onDropZoneDrop,
-  onDragEnd,
-  dropIndicator,
-  level,
-  children
+  action, onEdit, onDelete, onDragStart, onDragOver, onDrop,
+  onDropZoneOver, onDropZoneDrop, onDragEnd, dropIndicator, level, children
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
-  const { title, description, icon } = getActionDetails(action);
-
+  const { title, description, icon, accentClass, iconBg } = getActionDetails(action);
   const isContainer = action.type === ActionType.CONDITION || action.type === ActionType.CREATE_FOLDER || action.type === ActionType.TRIM;
-
-  const headerBase = `bg-brand-gray-700 rounded-lg p-3 flex flex-col transition-all duration-200 border select-none cursor-grab active:cursor-grabbing`;
-  const headerState = isContainer
-    ? `border-brand-gray-600 ${dropIndicator === 'inside' ? 'border-brand-blue bg-brand-blue/10' : ''}`
-    : `border-transparent hover:border-brand-blue`;
 
   return (
     <div
-      style={{ marginLeft: level > 0 ? `${level * 2}rem` : '0' }}
+      style={{ marginLeft: level > 0 ? `${level * 1.75}rem` : '0' }}
       className="relative"
     >
       {/* Drop indicator: BEFORE */}
       {dropIndicator === 'before' && (
-        <div className="absolute top-0 left-0 right-0 h-0.5 bg-brand-blue rounded-full z-20 pointer-events-none" />
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-brand-blue rounded-full z-20 pointer-events-none shadow-sm shadow-brand-blue/50" />
       )}
 
       {level > 0 && (
         <>
-          <div className="absolute top-6 -left-4 w-4 h-px bg-brand-gray-600" />
-          <div className="absolute -top-2 -left-4 h-[calc(50%)] w-px bg-brand-gray-600" />
-          <div className="absolute top-6 -left-4 h-[calc(100%-1.5rem)] w-px bg-brand-gray-600" />
+          <div className="absolute top-5 -left-3.5 w-3.5 h-px bg-brand-gray-600/60" />
+          <div className="absolute -top-2 -left-3.5 h-[calc(50%)] w-px bg-brand-gray-600/60" />
+          <div className="absolute top-5 -left-3.5 h-[calc(100%-1.25rem)] w-px bg-brand-gray-600/60" />
         </>
       )}
 
       <div className="flex flex-col">
-        {/* Header: drag source AND drop target */}
         <div
-          className={`${headerBase} ${headerState}`}
+          className={`
+            group relative bg-brand-gray-800/80 rounded-xl border border-brand-gray-700/50
+            border-l-2 ${accentClass}
+            ${dropIndicator === 'inside' ? 'border-brand-blue bg-brand-blue/5 ring-1 ring-brand-blue/20' : 'hover:border-brand-gray-600/80 hover:bg-brand-gray-800'}
+            p-3 flex flex-col transition-all duration-150 select-none cursor-grab active:cursor-grabbing active:shadow-xl active:scale-[0.99]
+          `}
           draggable
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
@@ -253,26 +160,34 @@ const ActionStep: React.FC<ActionStepProps> = ({
           onDrop={onDrop}
           onClick={isContainer ? () => setIsExpanded(!isExpanded) : undefined}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 flex-grow min-w-0">
-              <DragHandleIcon className="w-5 h-5 text-brand-gray-400 flex-shrink-0" />
-              <div className="flex-shrink-0 w-8 h-8 bg-brand-gray-800 rounded-lg flex items-center justify-center">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 flex-grow min-w-0">
+              <DragHandleIcon className="w-4 h-4 text-brand-gray-600 group-hover:text-brand-gray-500 flex-shrink-0 transition-colors" />
+              <div className={`flex-shrink-0 w-7 h-7 ${iconBg} rounded-lg flex items-center justify-center`}>
                 {icon}
               </div>
               <div className="min-w-0 flex-grow">
-                <p className="font-bold text-white truncate">{title}</p>
-                <p className="text-sm text-brand-gray-300 truncate">{description}</p>
+                <p className="font-semibold text-white text-sm leading-tight truncate">{title}</p>
+                <p className="text-xs text-brand-gray-400 truncate mt-0.5">{description}</p>
               </div>
               {isContainer && (
-                <ChevronDownIcon className={`w-5 h-5 text-brand-gray-400 flex-shrink-0 ml-2 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
+                <ChevronDownIcon className={`w-4 h-4 text-brand-gray-500 flex-shrink-0 ml-1 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
               )}
             </div>
-            <div className="flex items-center gap-1 pl-2">
-              <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-2 rounded-full hover:bg-brand-gray-600 transition-colors">
-                <EditIcon className="w-5 h-5 text-brand-gray-300" />
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+              <button
+                onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                className="p-1.5 rounded-lg hover:bg-brand-gray-700 text-brand-gray-500 hover:text-brand-gray-200 transition-all duration-100 active:scale-90"
+                title="Edit"
+              >
+                <EditIcon className="w-4 h-4" />
               </button>
-              <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-2 rounded-full hover:bg-brand-gray-600 transition-colors">
-                <TrashIcon className="w-5 h-5 text-red-500" />
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                className="p-1.5 rounded-lg hover:bg-red-500/10 text-brand-gray-500 hover:text-red-400 transition-all duration-100 active:scale-90"
+                title="Delete"
+              >
+                <TrashIcon className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -281,15 +196,19 @@ const ActionStep: React.FC<ActionStepProps> = ({
         {isContainer && (
           <div className={`transition-[grid-template-rows] duration-300 ease-in-out grid ${isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
             <div className="overflow-hidden">
-              <div className="pt-2 flex flex-col gap-2">
+              <div className="pt-1.5 flex flex-col gap-1.5">
                 {children}
                 <div
-                  className={`text-xs text-center border border-dashed rounded-md py-3 transition-colors ${dropIndicator === 'inside' ? 'border-brand-blue text-brand-blue bg-brand-blue/5' : 'border-brand-gray-600 text-brand-gray-500 bg-brand-gray-800/50'}`}
-                  style={{ marginLeft: `${(level + 1) * 2}rem` }}
+                  className={`text-xs text-center border border-dashed rounded-lg py-3 transition-all duration-150 ${
+                    dropIndicator === 'inside'
+                      ? 'border-brand-blue text-brand-blue bg-brand-blue/5'
+                      : 'border-brand-gray-600/50 text-brand-gray-500 hover:border-brand-gray-500/70 hover:text-brand-gray-400'
+                  }`}
+                  style={{ marginLeft: `${(level + 1) * 1.75}rem` }}
                   onDragOver={onDropZoneOver}
                   onDrop={onDropZoneDrop}
                 >
-                  Drop actions here to add to this container
+                  Drop steps here
                 </div>
               </div>
             </div>
@@ -299,7 +218,7 @@ const ActionStep: React.FC<ActionStepProps> = ({
 
       {/* Drop indicator: AFTER */}
       {dropIndicator === 'after' && (
-        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-blue rounded-full z-20 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-blue rounded-full z-20 pointer-events-none shadow-sm shadow-brand-blue/50" />
       )}
     </div>
   );

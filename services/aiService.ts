@@ -1,26 +1,26 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import Anthropic from '@anthropic-ai/sdk';
 import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ResizeUnit, SaveFormat, ResizeMode, RotationType, ColorProfile, ConditionAction, ConditionProperty, ConditionOperator, Condition, SaveConfig, SaveLogic, FileNameConflictResolution, TrimAction, TrimBasedOn, FlattenAction, MetadataAction } from '../types';
 
-let _ai: GoogleGenAI | null = null;
+let _client: Anthropic | null = null;
 
-function getAI(): GoogleGenAI {
-  if (!_ai) {
-    const apiKey = process.env.API_KEY as string;
+function getClient(): Anthropic {
+  if (!_client) {
+    const apiKey = process.env.ANTHROPIC_API_KEY as string;
     if (!apiKey) {
-      throw new Error("API key missing. Create a .env.local file with: GEMINI_API_KEY=your_key_here");
+      throw new Error("API key missing. Create a .env.local file with: ANTHROPIC_API_KEY=your_key_here");
     }
-    _ai = new GoogleGenAI({ apiKey });
+    _client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   }
-  return _ai;
+  return _client;
 }
 
 // --- Prompt Generation Functions ---
 
 const buildScriptPreamble = () => `
 Generate a comprehensive and robust Adobe Photoshop script using JavaScript (ExtendScript),
-targeting Photoshop 2022-2025 (v23-v26+). The script must use modern ExtendScript API patterns
-that are fully compatible with the latest versions of Photoshop.
+targeting Photoshop 2022-2026 (v23-v27+). The script must use modern ExtendScript API patterns
+that are fully compatible with the latest versions of Photoshop, including Photoshop 2026 (v27).
 `;
 
 const buildBestPracticesSection = () => `
@@ -143,14 +143,14 @@ function buildCreateFolderDescription(action: CreateFolderAction, outputFolderNa
   if (isUNC) {
     return `Create a folder at the absolute UNC path "${folderName}". The script must handle UNC pathing correctly (e.g., using forward slashes like '//server/share' or escaped backslashes). This action defines a new working directory for any nested save actions.`;
   }
-  
+
   const targetDir = parentPath ? `${parentPath}/${folderName}` : folderName;
   const isParentUNC = parentPath.startsWith('\\\\');
 
   if (isParentUNC) {
       return `Create a new subfolder path "${targetDir}". The script must create this folder if it does not already exist. This action defines a new working directory for any nested save actions.`;
   }
-  
+
   return `Create a new subfolder path "${targetDir}" relative to the main "${outputFolderName}" directory. The script must create this folder if it does not already exist. This action defines a new working directory for any nested save actions.`;
 }
 
@@ -211,7 +211,6 @@ function buildMetadataDescription(action: MetadataAction): string {
 
   let desc = '';
 
-  // Metadata fields
   const metaLines: string[] = [];
   if (title) metaLines.push(`doc.info.title = ${JSON.stringify(title)};`);
   if (author) metaLines.push(`doc.info.author = ${JSON.stringify(author)};`);
@@ -225,7 +224,6 @@ function buildMetadataDescription(action: MetadataAction): string {
     metaLines.forEach(line => { desc += `  \`${line}\`\n`; });
   }
 
-  // Filename rename
   const hasRename = stripNumericPrefix || !!addPrefix || !!addSuffix;
   if (hasRename) {
     desc += `\n**Filename rename** — The \`baseName\` variable is already declared at the top of the file processing try block (as \`var baseName = doc.name.replace(/\\.[^\\.]+$/, '');\`). Do NOT redeclare it. Apply ONLY these in-place modifications to the existing \`baseName\` variable, in order:\n`;
@@ -261,7 +259,7 @@ function buildResizeDescription(action: ResizeAction, outputFolderName: string, 
 
   if (mode === ResizeMode.LONGEST_EDGE && length) {
     desc += `Resize the image so its longest edge is ${length}${unit}. The aspect ratio must be maintained. `;
-  } else { // DIMENSIONS mode
+  } else {
     if (width && height) {
       desc += `Set dimensions to ${width}${unit} width and ${height}${unit} height. `;
     } else if (width) {
@@ -269,7 +267,6 @@ function buildResizeDescription(action: ResizeAction, outputFolderName: string, 
     } else if (height) {
       desc += `Set height to ${height}${unit}. `;
     }
-    
     if (maintainAspectRatio) {
         desc += 'Maintain the aspect ratio. ';
     }
@@ -278,7 +275,7 @@ function buildResizeDescription(action: ResizeAction, outputFolderName: string, 
   if (resolution) {
     desc += `Set the resolution to ${resolution} DPI. `;
   }
-  
+
   desc += 'For the resampling method, use the best option for Photoshop 2024+ (v25+): ' +
     'If the new dimensions are LARGER than the original (upscaling), use `ResampleMethod.PRESERVE_DETAILS_2`. ' +
     'If the new dimensions are SMALLER than the original (downscaling), use `ResampleMethod.BICUBIC_SHARPER`. ' +
@@ -298,7 +295,7 @@ function buildResizeDescription(action: ResizeAction, outputFolderName: string, 
         desc += `  - **For CMYK documents (inside an \`else if (doc.mode === DocumentMode.CMYK)\` or \`else\` block)**: ${cmykSaveDesc}`;
       }
   } else if (saveConfig) {
-      desc += 'After resizing, immediately perform the following save action: '
+      desc += 'After resizing, immediately perform the following save action: ';
       desc += buildSaveDescription({ type: ActionType.SAVE, config: saveConfig, id: '' }, outputFolderName, parentPath);
   }
 
@@ -314,13 +311,12 @@ This prevents altering the original multi-layer document state for subsequent ac
 
 function buildSaveDescription(action: SaveAction, outputFolderName: string, parentPath: string = ''): string {
   const { format, jpegQuality, tiffCompression, tiffTransparency, appendSuffix, subfolder, psdTiffLayers, conflictResolution = FileNameConflictResolution.OVERWRITE } = action.config;
-  // CRITICAL FIX: Default pngTransparency to TRUE if undefined. The UI defaults to showing it checked, so we must treat undefined as checked.
   const pngTransparency = action.config.pngTransparency ?? true;
 
   let desc = `Save a copy of the processed image. `;
-  
+
   const isSubfolderUNC = subfolder?.startsWith('\\\\');
-  
+
   if (isSubfolderUNC) {
       desc += `The file should be saved in the absolute UNC path "${subfolder}". The script must create this folder path if it does not exist and handle UNC pathing correctly (e.g., using forward slashes like '//server/share' or escaped backslashes). `;
   } else {
@@ -328,7 +324,6 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
       if (subfolder) {
           finalPath = parentPath ? `${parentPath}/${subfolder}` : subfolder;
       }
-      
       if (finalPath) {
         const isParentUNC = parentPath.startsWith('\\\\');
         if (isParentUNC) {
@@ -340,7 +335,7 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
         desc += `The file should be saved in the main "${outputFolderName}" directory that was created inside the input directory. `;
       }
   }
-  
+
   if (appendSuffix) {
     desc += `Use \`baseName\` as the base filename and append the suffix "${appendSuffix}" to it (e.g. \`baseName + "${appendSuffix}"\`). `;
   } else {
@@ -355,9 +350,7 @@ function buildSaveDescription(action: SaveAction, outputFolderName: string, pare
       break;
     case SaveFormat.PNG:
       desc += "CRITICAL INCOMPATIBILITY HANDLING: Before attempting to save as PNG, you MUST check if the document is in CMYK mode (`doc.mode === DocumentMode.CMYK`). If it is, you MUST automatically convert the document to RGB mode (`doc.changeMode(ChangeMode.RGB)`) before proceeding with the save. This is a non-negotiable, automatic conversion; do not prompt the user. After this potential conversion, proceed with the standard PNG save logic: ";
-      
       desc += `Use PNG-24 format. `;
-
       if (pngTransparency) {
           desc += `Save with transparency ENABLED.
           CRITICAL: To preserve transparency, DO NOT use 'doc.flatten()' because it replaces transparent areas with a white background.
@@ -459,7 +452,7 @@ function buildConditionString(condition: Condition): string {
     case ConditionOperator.IS: opString = '==='; break;
     case ConditionOperator.IS_NOT: opString = '!=='; break;
   }
-  
+
   return `${propString} ${opString} ${valString}`;
 }
 
@@ -468,7 +461,7 @@ function buildPromptFromActions(actions: Action[], outputFolderName: string, par
 
   return actions.map((action, index) => {
     let stepDescription = `${indent}${index + 1}. `;
-    
+
     switch (action.type) {
       case ActionType.RESIZE:
         stepDescription += `**RESIZE Action**: ${buildResizeDescription(action as ResizeAction, outputFolderName, parentPath)}`;
@@ -479,8 +472,8 @@ function buildPromptFromActions(actions: Action[], outputFolderName: string, par
       case ActionType.CREATE_FOLDER:
         const cfAction = action as CreateFolderAction;
         const isUNC = cfAction.config.folderName.startsWith('\\\\');
-        const newPath = isUNC 
-            ? cfAction.config.folderName 
+        const newPath = isUNC
+            ? cfAction.config.folderName
             : (parentPath ? `${parentPath}/${cfAction.config.folderName}` : cfAction.config.folderName);
         const thenPrompt = buildPromptFromActions(cfAction.then, outputFolderName, newPath, level + 1);
         stepDescription += `**CONTAINER: CREATE_FOLDER**: ${buildCreateFolderDescription(cfAction, outputFolderName, parentPath)} Then, execute the following nested steps, with all save operations targeting the newly created "${cfAction.config.folderName}" folder:\n${thenPrompt}`;
@@ -534,230 +527,196 @@ ${buildFileLoopSection(actionSteps)}
 ${buildCompletionSection(outputFolderName)}
 ${buildScriptCleanupSection()}
 `;
-  
-  console.log("Generated Prompt for Gemini:", fullPrompt);
+
+  console.log("Generated Prompt for Claude:", fullPrompt);
 
   try {
-    const response = await getAI().models.generateContent({
-      model: 'gemini-2.5-pro',
-      contents: fullPrompt,
+    const stream = getClient().messages.stream({
+      model: 'claude-opus-4-7',
+      max_tokens: 32000,
+      messages: [{ role: 'user', content: fullPrompt }],
     });
-    
-    const text = response.text;
-    const codeBlockMatch = text.match(/```(?:javascript|jsx)\n([\s\S]*?)```/);
-    
+    const response = await stream.finalMessage();
+
+    const textBlock = response.content.find(b => b.type === 'text');
+    const text = textBlock && textBlock.type === 'text' ? textBlock.text : '';
+    const codeBlockMatch = text.match(/```(?:javascript|jsx?|extendscript)\n([\s\S]*?)```/);
+
     let script: string;
     if (codeBlockMatch && codeBlockMatch[1]) {
       script = codeBlockMatch[1].trim();
     } else {
-      // Fallback if no code block is found, assume the whole response is the script
       script = text.trim();
     }
 
-    // Stability check: Ensure the output is likely a valid script before returning
     if (!script.includes('function main()') || !script.includes('app.open(')) {
-        console.error("Generated script appears invalid:", script);
-        throw new Error("The AI failed to generate a valid script structure. Please try again or adjust your steps.");
+      console.error("Generated script appears invalid:", script);
+      throw new Error("The AI failed to generate a valid script structure. Please try again or adjust your steps.");
     }
 
     return script;
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("The AI failed")) {
-        throw error;
+      throw error;
     }
-    console.error("Error calling Gemini API:", error);
+    console.error("Error calling Claude API:", error);
 
     let errorMessage = "An unknown error occurred while generating the script.";
     if (error instanceof Error) {
-        const lowerCaseMessage = error.message.toLowerCase();
-        if (lowerCaseMessage.includes("api key not valid")) {
-            errorMessage = "Authentication failed. Please check if your API key is configured correctly.";
-        } else if (lowerCaseMessage.includes("rate limit")) {
-            errorMessage = "API rate limit exceeded. Please wait a moment and try again.";
-        } else if (lowerCaseMessage.includes("content has been blocked") || lowerCaseMessage.includes("candidate was blocked")) {
-            errorMessage = "The request was blocked due to content safety policies. Please adjust your steps or try again.";
-        } else {
-            errorMessage = "Failed to generate script from Gemini API. Please try again later.";
-        }
+      const msg = error.message.toLowerCase();
+      if (msg.includes("authentication") || msg.includes("api key") || msg.includes("401")) {
+        errorMessage = "Authentication failed. Please check if your ANTHROPIC_API_KEY is configured correctly.";
+      } else if (msg.includes("rate limit") || msg.includes("429")) {
+        errorMessage = "API rate limit exceeded. Please wait a moment and try again.";
+      } else if (msg.includes("overloaded") || msg.includes("529")) {
+        errorMessage = "The AI service is temporarily overloaded. Please try again in a moment.";
+      } else {
+        errorMessage = "Failed to generate script. Please try again later.";
+      }
     }
-    
+
     throw new Error(errorMessage);
   }
 }
 
-const saveConfigSchema = {
-    type: Type.OBJECT,
-    properties: {
-        format: { type: Type.STRING, enum: Object.values(SaveFormat) },
-        jpegQuality: { type: Type.INTEGER, nullable: true },
-        pngTransparency: { type: Type.BOOLEAN, nullable: true },
-        tiffCompression: { type: Type.STRING, enum: ['NONE', 'LZW', 'ZIP'], nullable: true },
-        tiffTransparency: { type: Type.BOOLEAN, nullable: true },
-        psdTiffLayers: { type: Type.BOOLEAN, nullable: true },
-        appendSuffix: { type: Type.STRING, nullable: true },
-        subfolder: { type: Type.STRING, nullable: true },
-        conflictResolution: { type: Type.STRING, enum: Object.values(FileNameConflictResolution), nullable: true },
-    },
-    required: ['format'],
-};
+// --- JSON Schema for parseScriptToActions (Claude tool use) ---
 
+const saveConfigSchema = {
+  type: 'object',
+  properties: {
+    format: { type: 'string', enum: Object.values(SaveFormat) },
+    jpegQuality: { type: 'integer' },
+    pngTransparency: { type: 'boolean' },
+    tiffCompression: { type: 'string', enum: ['NONE', 'LZW', 'ZIP'] },
+    tiffTransparency: { type: 'boolean' },
+    psdTiffLayers: { type: 'boolean' },
+    appendSuffix: { type: 'string' },
+    subfolder: { type: 'string' },
+    conflictResolution: { type: 'string', enum: Object.values(FileNameConflictResolution) },
+  },
+  required: ['format'],
+};
 
 const actionConfigProperties = {
-    // ResizeAction
-    mode: { type: Type.STRING, enum: Object.values(ResizeMode), nullable: true },
-    width: { type: Type.INTEGER, nullable: true },
-    height: { type: Type.INTEGER, nullable: true },
-    length: { type: Type.INTEGER, nullable: true },
-    unit: { type: Type.STRING, enum: Object.values(ResizeUnit), nullable: true },
-    maintainAspectRatio: { type: Type.BOOLEAN, nullable: true },
-    resolution: { type: Type.INTEGER, nullable: true },
-    saveConfig: { ...saveConfigSchema, nullable: true },
-    // SaveAction
-    format: { type: Type.STRING, enum: Object.values(SaveFormat), nullable: true },
-    jpegQuality: { type: Type.INTEGER, nullable: true },
-    pngTransparency: { type: Type.BOOLEAN, nullable: true },
-    tiffCompression: { type: Type.STRING, enum: ['NONE', 'LZW', 'ZIP'], nullable: true },
-    tiffTransparency: { type: Type.BOOLEAN, nullable: true },
-    psdTiffLayers: { type: Type.BOOLEAN, nullable: true },
-    appendSuffix: { type: Type.STRING, nullable: true },
-    subfolder: { type: Type.STRING, nullable: true },
-    conflictResolution: { type: Type.STRING, enum: Object.values(FileNameConflictResolution), nullable: true },
-    // CreateFolderAction
-    folderName: { type: Type.STRING, nullable: true },
-    // RotateAction
-    rotation: { type: Type.STRING, enum: Object.values(RotationType), nullable: true },
-    // ColorModeAction
-    profile: { type: Type.STRING, enum: Object.values(ColorProfile), nullable: true },
-    // TrimAction
-    basedOn: { type: Type.STRING, enum: Object.values(TrimBasedOn), nullable: true },
-    top: { type: Type.BOOLEAN, nullable: true },
-    bottom: { type: Type.BOOLEAN, nullable: true },
-    left: { type: Type.BOOLEAN, nullable: true },
-    right: { type: Type.BOOLEAN, nullable: true },
-    // FlattenAction
-    preserveTransparency: { type: Type.BOOLEAN, nullable: true },
-    // MetadataAction
-    title: { type: Type.STRING, nullable: true },
-    author: { type: Type.STRING, nullable: true },
-    copyright: { type: Type.STRING, nullable: true },
-    description: { type: Type.STRING, nullable: true },
-    keywords: { type: Type.STRING, nullable: true },
-    stripNumericPrefix: { type: Type.BOOLEAN, nullable: true },
-    numericPrefixLength: { type: Type.INTEGER, nullable: true },
-    addPrefix: { type: Type.STRING, nullable: true },
-    addSuffix: { type: Type.STRING, nullable: true },
-    // ConditionAction
-    condition: {
-        type: Type.OBJECT,
-        nullable: true,
-        properties: {
-            property: { type: Type.STRING, enum: Object.values(ConditionProperty) },
-            operator: { type: Type.STRING, enum: Object.values(ConditionOperator) },
-            value: { type: Type.ONE_OF, oneOf: [{type: Type.STRING}, {type: Type.INTEGER}] },
-        }
+  mode: { type: 'string', enum: Object.values(ResizeMode) },
+  width: { type: 'integer' },
+  height: { type: 'integer' },
+  length: { type: 'integer' },
+  unit: { type: 'string', enum: Object.values(ResizeUnit) },
+  maintainAspectRatio: { type: 'boolean' },
+  resolution: { type: 'integer' },
+  saveConfig: saveConfigSchema,
+  format: { type: 'string', enum: Object.values(SaveFormat) },
+  jpegQuality: { type: 'integer' },
+  pngTransparency: { type: 'boolean' },
+  tiffCompression: { type: 'string', enum: ['NONE', 'LZW', 'ZIP'] },
+  tiffTransparency: { type: 'boolean' },
+  psdTiffLayers: { type: 'boolean' },
+  appendSuffix: { type: 'string' },
+  subfolder: { type: 'string' },
+  conflictResolution: { type: 'string', enum: Object.values(FileNameConflictResolution) },
+  folderName: { type: 'string' },
+  rotation: { type: 'string', enum: Object.values(RotationType) },
+  profile: { type: 'string', enum: Object.values(ColorProfile) },
+  basedOn: { type: 'string', enum: Object.values(TrimBasedOn) },
+  top: { type: 'boolean' },
+  bottom: { type: 'boolean' },
+  left: { type: 'boolean' },
+  right: { type: 'boolean' },
+  preserveTransparency: { type: 'boolean' },
+  title: { type: 'string' },
+  author: { type: 'string' },
+  copyright: { type: 'string' },
+  description: { type: 'string' },
+  keywords: { type: 'string' },
+  stripNumericPrefix: { type: 'boolean' },
+  numericPrefixLength: { type: 'integer' },
+  addPrefix: { type: 'string' },
+  addSuffix: { type: 'string' },
+  condition: {
+    type: 'object',
+    properties: {
+      property: { type: 'string', enum: Object.values(ConditionProperty) },
+      operator: { type: 'string', enum: Object.values(ConditionOperator) },
+      value: { oneOf: [{ type: 'string' }, { type: 'integer' }] },
     },
+    required: ['property', 'operator', 'value'],
+  },
 };
 
-// To handle nested actions without circular references, we define schemas for different depths.
-// This allows the model to correctly parse scripts with nested containers.
-
-// Level 2: An action that CANNOT have nested actions. This is the deepest level supported.
 const actionSchemaLevel2 = {
-    type: Type.OBJECT,
-    properties: {
-        type: { type: Type.STRING, enum: Object.values(ActionType) },
-        config: { type: Type.OBJECT, properties: actionConfigProperties },
-    },
-    required: ['type', 'config'],
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: Object.values(ActionType) },
+    config: { type: 'object', properties: actionConfigProperties },
+  },
+  required: ['type', 'config'],
 };
 
-// Level 1: An action that CAN have nested actions, but its children must be Level 2 (no deeper nesting).
-const actionSchemaLevel1 = {
-    type: Type.OBJECT,
-    properties: {
-        type: { type: Type.STRING, enum: Object.values(ActionType) },
-        config: { type: Type.OBJECT, properties: actionConfigProperties },
-        then: { type: Type.ARRAY, items: actionSchemaLevel2, nullable: true },
-    },
-    required: ['type', 'config'],
+const actionSchemaLevel1: any = {
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: Object.values(ActionType) },
+    config: { type: 'object', properties: actionConfigProperties },
+    then: { type: 'array', items: actionSchemaLevel2 },
+  },
+  required: ['type', 'config'],
 };
 
-// Top Level (Level 0): An action whose children can be Level 1. This allows for two levels of nesting total.
 const actionSchema: any = {
-    type: Type.OBJECT,
-    properties: {
-        type: { type: Type.STRING, enum: Object.values(ActionType) },
-        config: { type: Type.OBJECT, properties: actionConfigProperties },
-        then: { type: Type.ARRAY, items: actionSchemaLevel1, nullable: true },
-    },
-    required: ['type', 'config'],
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: Object.values(ActionType) },
+    config: { type: 'object', properties: actionConfigProperties },
+    then: { type: 'array', items: actionSchemaLevel1 },
+  },
+  required: ['type', 'config'],
 };
 
-
-const parsingSchema = {
-    type: Type.OBJECT,
-    properties: {
-        outputFolderName: { type: Type.STRING },
-        actions: {
-            type: Type.ARRAY,
-            items: actionSchema,
-        },
-    },
-    required: ['outputFolderName', 'actions'],
+const parsingToolInputSchema = {
+  type: 'object' as const,
+  properties: {
+    outputFolderName: { type: 'string' },
+    actions: { type: 'array', items: actionSchema },
+  },
+  required: ['outputFolderName', 'actions'],
 };
 
 function validateParsedData(data: any): data is { outputFolderName: string; actions: Omit<Action, 'id'>[] } {
-    if (typeof data !== 'object' || data === null) return false;
-    if (typeof data.outputFolderName !== 'string' || data.outputFolderName.trim() === '') return false;
-    if (!Array.isArray(data.actions)) return false;
-    
-    const validateActions = (actions: any[]): boolean => {
-        for (const action of actions) {
-            if (typeof action !== 'object' || action === null || !action.type || !action.config) {
-                return false;
-            }
-            if (!Object.values(ActionType).includes(action.type)) {
-                return false;
-            }
-            // Check for container actions
-            if (action.type === ActionType.CONDITION || action.type === ActionType.CREATE_FOLDER || action.type === ActionType.TRIM) {
-                // Allow 'then' to be undefined or null, as the parser might omit it if empty.
-                // However, if it IS present, it MUST be an array of valid actions.
-                if (action.then !== undefined && action.then !== null) {
-                     if (!Array.isArray(action.then) || !validateActions(action.then)) {
-                        return false;
-                     }
-                }
-            }
-        }
-        return true;
-    };
+  if (typeof data !== 'object' || data === null) return false;
+  if (typeof data.outputFolderName !== 'string' || data.outputFolderName.trim() === '') return false;
+  if (!Array.isArray(data.actions)) return false;
 
-    return validateActions(data.actions);
+  const validateActions = (actions: any[]): boolean => {
+    for (const action of actions) {
+      if (typeof action !== 'object' || action === null || !action.type || !action.config) return false;
+      if (!Object.values(ActionType).includes(action.type)) return false;
+      if (action.type === ActionType.CONDITION || action.type === ActionType.CREATE_FOLDER || action.type === ActionType.TRIM) {
+        if (action.then !== undefined && action.then !== null) {
+          if (!Array.isArray(action.then) || !validateActions(action.then)) return false;
+        }
+      }
+    }
+    return true;
+  };
+
+  return validateActions(data.actions);
 }
 
 function assignRandomIds(actions: Omit<Action, 'id'>[]): Action[] {
-    return actions.map((action: any) => {
-        const newAction = {
-            ...action,
-            id: crypto.randomUUID(),
-        };
-        // Check for container types and ensure 'then' is initialized as an array if missing
-        if (newAction.type === ActionType.CONDITION || newAction.type === ActionType.CREATE_FOLDER || newAction.type === ActionType.TRIM) {
-             if (newAction.then) {
-                newAction.then = assignRandomIds(newAction.then);
-             } else {
-                newAction.then = []; // Initialize empty array for safety
-             }
-        }
-        return newAction;
-    });
+  return actions.map((action: any) => {
+    const newAction = { ...action, id: crypto.randomUUID() };
+    if (newAction.type === ActionType.CONDITION || newAction.type === ActionType.CREATE_FOLDER || newAction.type === ActionType.TRIM) {
+      newAction.then = newAction.then ? assignRandomIds(newAction.then) : [];
+    }
+    return newAction;
+  });
 }
 
 export async function parseScriptToActions(scriptContent: string): Promise<{ outputFolderName: string; actions: Action[] }> {
   const prompt = `
     Analyze the following Adobe Photoshop ExtendScript code. Your task is to extract the main output folder name and the sequence of actions performed on each image, including any conditional logic and folder creation containers.
-    Return a single JSON object that strictly adheres to the provided schema.
+    Call the extract_script_actions tool with a JSON object that strictly adheres to its schema.
 
     **Analysis Instructions:**
     1.  **outputFolderName**: Extract the name of the main output directory created inside the user-selected input folder.
@@ -775,7 +734,6 @@ export async function parseScriptToActions(scriptContent: string): Promise<{ out
         *   For "FLATTEN", identify calls to \`doc.flatten()\` or \`app.activeDocument.flatten()\` — set \`"preserveTransparency": false\`. If you see \`doc.mergeVisibleLayers()\` instead, set \`"preserveTransparency": true\`.
         *   For "METADATA", identify assignments to \`doc.info.*\` (title, author, copyrightNotice, caption, keywords) and map them to the corresponding config properties. For renaming, look for \`baseName.replace()\` calls — if stripping a leading numeric prefix, set \`"stripNumericPrefix": true\` and \`"numericPrefixLength"\`. If a prefix string is prepended to baseName, set \`"addPrefix"\`. If a suffix string is appended to baseName, set \`"addSuffix"\`.
     6.  **Conflict Handling**: For any save operation, determine the filename conflict strategy. Look for checks like \`File(path).exists\`. If it's followed by a \`prompt()\` dialog, set \`"conflictResolution": "PROMPT"\`. If it's followed by a loop that appends an incrementing suffix (e.g., "_1", "_2"), set \`"conflictResolution": "APPEND_SUFFIX"\`. If there is no existence check and the file is saved directly, assume \`"conflictResolution": "OVERWRITE"\`.
-    7.  **JSON Output**: Construct the JSON object based on your findings. The structure, including nesting for conditions and folders, must exactly match the schema. Do not include any extra text or explanations.
 
     **Script to Analyze:**
     \`\`\`javascript
@@ -784,49 +742,49 @@ export async function parseScriptToActions(scriptContent: string): Promise<{ out
   `;
 
   try {
-    const response = await getAI().models.generateContent({
-      model: 'gemini-2.5-pro',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: parsingSchema,
-      }
+    const response = await getClient().messages.create({
+      model: 'claude-opus-4-7',
+      max_tokens: 8192,
+      tools: [{
+        name: 'extract_script_actions',
+        description: 'Extract the structured action list and output folder name from a Photoshop ExtendScript batch processing script.',
+        input_schema: parsingToolInputSchema,
+      }],
+      tool_choice: { type: 'tool', name: 'extract_script_actions' },
+      messages: [{ role: 'user', content: prompt }],
     });
-    
-    let parsedJson;
-    try {
-        parsedJson = JSON.parse(response.text);
-    } catch (jsonError) {
-        console.error("Gemini response was not valid JSON:", response.text);
-        throw new Error("Script analysis failed: The model returned an invalid format. Please try again.");
+
+    const toolBlock = response.content.find((b: any) => b.type === 'tool_use');
+    if (!toolBlock || toolBlock.type !== 'tool_use') {
+      throw new Error("Script analysis failed: The model did not return a structured result. Please try again.");
     }
 
+    const parsedJson = (toolBlock as any).input;
+
     if (!validateParsedData(parsedJson)) {
-        console.error("Parsed JSON does not match expected schema:", parsedJson);
-        throw new Error("Script analysis failed: The script's structure could not be recognized. Please ensure it is a script generated by this tool.");
+      console.error("Parsed JSON does not match expected schema:", parsedJson);
+      throw new Error("Script analysis failed: The script's structure could not be recognized. Please ensure it is a script generated by this tool.");
     }
-    
+
     const actionsWithIds = assignRandomIds(parsedJson.actions);
     return { ...parsedJson, actions: actionsWithIds };
 
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Script analysis failed:")) {
-        throw error; // Re-throw the specific, user-friendly error
+      throw error;
     }
-    console.error("Error parsing script with Gemini API:", error);
-    
+    console.error("Error parsing script with Claude API:", error);
+
     let errorMessage = "An unknown error occurred while analyzing the script.";
     if (error instanceof Error) {
-        const lowerCaseMessage = error.message.toLowerCase();
-        if (lowerCaseMessage.includes("api key not valid")) {
-            errorMessage = "Authentication failed. Please check if your API key is configured correctly.";
-        } else if (lowerCaseMessage.includes("rate limit")) {
-            errorMessage = "API rate limit exceeded. Please wait a moment and try again.";
-        } else if (lowerCaseMessage.includes("content has been blocked") || lowerCaseMessage.includes("candidate was blocked")) {
-            errorMessage = "The script could not be analyzed due to content safety policies. Please check your input.";
-        } else {
-            errorMessage = "An error occurred while communicating with the AI model. Please check your internet connection and try again.";
-        }
+      const msg = error.message.toLowerCase();
+      if (msg.includes("authentication") || msg.includes("api key") || msg.includes("401")) {
+        errorMessage = "Authentication failed. Please check if your ANTHROPIC_API_KEY is configured correctly.";
+      } else if (msg.includes("rate limit") || msg.includes("429")) {
+        errorMessage = "API rate limit exceeded. Please wait a moment and try again.";
+      } else {
+        errorMessage = "An error occurred while communicating with the AI model. Please check your internet connection and try again.";
+      }
     }
 
     throw new Error(errorMessage);
