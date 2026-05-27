@@ -1,7 +1,7 @@
 
 import React, { useCallback, useRef, useState } from 'react';
 import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ConditionAction, TrimAction, FlattenAction, MetadataAction } from './types';
-import { generateScriptPrompt, parseScriptToActions } from './services/geminiService';
+import { generateScriptPrompt, parseScriptToActions } from './services/aiService';
 import Header from './components/Header';
 import ActionStep from './components/ActionStep';
 import ResizeModal from './components/modals/ResizeModal';
