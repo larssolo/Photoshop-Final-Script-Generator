@@ -85,10 +85,13 @@ const App: React.FC = () => {
   const dragItem = useRef<Action | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{ id: string; position: 'before' | 'after' | 'inside' } | null>(null);
   const [isScriptExpanded, setIsScriptExpanded] = useState(false);
+  const [showDownloadOverlay, setShowDownloadOverlay] = useState(false);
 
-  // Collapse script view whenever a new script arrives — user opts in to view it.
   useEffect(() => {
-    if (generatedScript) setIsScriptExpanded(false);
+    if (generatedScript) {
+      setIsScriptExpanded(false);
+      setShowDownloadOverlay(true);
+    }
   }, [generatedScript]);
 
   const isContainerType = (type: ActionType) =>
@@ -157,6 +160,7 @@ const App: React.FC = () => {
     a.href = url; a.download = 'photoshop-script.jsx';
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
+    setShowDownloadOverlay(false);
   };
 
   const handleImportScript = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -422,6 +426,52 @@ const App: React.FC = () => {
           </a>
         </p>
       </footer>
+
+      {/* ── Download overlay ─────────────────────────────────────────── */}
+      {showDownloadOverlay && generatedScript && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center"
+          style={{ background: 'rgba(2, 30, 14, 0.92)' }}
+          onClick={() => setShowDownloadOverlay(false)}
+        >
+          {/* Stop propagation so clicking the card itself doesn't dismiss */}
+          <div
+            className="flex flex-col items-center gap-8 px-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Pulsing glow ring */}
+            <div className="relative">
+              <div className="absolute inset-0 rounded-full bg-emerald-500/20 blur-3xl scale-150 animate-pulse-subtle" />
+              <button
+                onClick={handleDownloadScript}
+                className="relative flex flex-col items-center justify-center gap-5 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.97] text-white rounded-3xl transition-all duration-200 shadow-2xl shadow-emerald-900/80 hover:shadow-emerald-700/60 px-20"
+                style={{ minWidth: '480px', height: '230px' }}
+              >
+                <DownloadIcon className="w-14 h-14 opacity-90" />
+                <span className="text-5xl font-bold tracking-tight">Download Script</span>
+                <span className="text-emerald-200/60 text-base font-medium -mt-2">photoshop-script.jsx</span>
+              </button>
+            </div>
+
+            {/* Dismiss + preview options */}
+            <div className="flex items-center gap-6">
+              <button
+                onClick={() => { setShowDownloadOverlay(false); setIsScriptExpanded(true); }}
+                className="text-sm text-emerald-300/70 hover:text-emerald-200 transition-colors underline underline-offset-4"
+              >
+                Preview script
+              </button>
+              <span className="text-emerald-900 text-xs">·</span>
+              <button
+                onClick={() => setShowDownloadOverlay(false)}
+                className="text-sm text-emerald-300/70 hover:text-emerald-200 transition-colors underline underline-offset-4"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modals ──────────────────────────────────────────────────────── */}
       {modal.type === 'resize' && <ResizeModal isOpen onClose={() => dispatch({ type: 'CLOSE_MODALS' })} onSave={handleAddAction} existingAction={currentAction as ResizeAction | undefined} />}
