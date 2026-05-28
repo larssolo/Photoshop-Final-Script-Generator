@@ -12,7 +12,11 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react(), tailwindcss()],
       define: {
-        'process.env.ANTHROPIC_API_KEY': JSON.stringify(env.ANTHROPIC_API_KEY)
+        // loadEnv reads .env files (local dev); process.env.ANTHROPIC_API_KEY is set
+        // by Vercel (and other CI/CD) during the build process. Cover both cases.
+        'process.env.ANTHROPIC_API_KEY': JSON.stringify(
+          env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || ''
+        )
       },
       resolve: {
         alias: {

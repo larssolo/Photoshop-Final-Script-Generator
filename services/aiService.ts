@@ -7,8 +7,8 @@ let _client: Anthropic | null = null;
 function getClient(): Anthropic {
   if (!_client) {
     const apiKey = process.env.ANTHROPIC_API_KEY as string;
-    if (!apiKey) {
-      throw new Error("API key missing. Create a .env.local file with: ANTHROPIC_API_KEY=your_key_here");
+    if (!apiKey || apiKey === 'undefined') {
+      throw new Error("API key missing. Set ANTHROPIC_API_KEY in your .env.local file (local) or in your Vercel project settings (production).");
     }
     _client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   }

@@ -1,5 +1,5 @@
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ConditionAction, TrimAction, FlattenAction, MetadataAction } from './types';
 import { generateScriptPrompt, parseScriptToActions } from './services/aiService';
 import Header from './components/Header';
@@ -15,7 +15,7 @@ import FlattenModal from './components/modals/FlattenModal';
 import MetadataModal from './components/modals/MetadataModal';
 import CodeBlock from './components/CodeBlock';
 import UserGuide from './components/UserGuide';
-import { SparklesIcon, DownloadIcon, BranchIcon, ScissorsIcon, FlattenIcon, MetadataIcon, ResizeIcon, SaveIcon, FolderIcon, RotateIcon, ColorSwatchIcon } from './components/icons/Icons';
+import { SparklesIcon, DownloadIcon, BranchIcon, ScissorsIcon, FlattenIcon, MetadataIcon, ResizeIcon, SaveIcon, FolderIcon, RotateIcon, ColorSwatchIcon, ChevronDownIcon } from './components/icons/Icons';
 import { useAppState, useAppDispatch } from './state/AppContext';
 
 // ─── Action button definitions ───────────────────────────────────────────────
@@ -84,6 +84,12 @@ const App: React.FC = () => {
 
   const dragItem = useRef<Action | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{ id: string; position: 'before' | 'after' | 'inside' } | null>(null);
+  const [isScriptExpanded, setIsScriptExpanded] = useState(false);
+
+  // Collapse script view whenever a new script arrives — user opts in to view it.
+  useEffect(() => {
+    if (generatedScript) setIsScriptExpanded(false);
+  }, [generatedScript]);
 
   const isContainerType = (type: ActionType) =>
     type === ActionType.CONDITION || type === ActionType.CREATE_FOLDER || type === ActionType.TRIM;
@@ -327,6 +333,16 @@ const App: React.FC = () => {
                   )}
                 </button>
 
+                {generatedScript && !isLoading && (
+                  <button
+                    onClick={handleDownloadScript}
+                    className="mt-3 w-full flex items-center justify-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 hover:text-emerald-200 font-medium py-3 px-4 rounded-xl border border-emerald-500/30 hover:border-emerald-400/60 transition-all duration-150 active:scale-[0.98] text-sm hover:-translate-y-px hover:shadow-lg hover:shadow-emerald-500/10"
+                  >
+                    <DownloadIcon className="w-4 h-4" />
+                    Download .jsx file
+                  </button>
+                )}
+
                 {error && (
                   <div className="mt-3 flex items-start gap-2.5 bg-red-500/8 border border-red-500/20 rounded-xl px-4 py-3">
                     <svg className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -344,32 +360,55 @@ const App: React.FC = () => {
 
             {/* Panel header */}
             <div className="px-6 pt-6 pb-4 border-b border-brand-gray-700/40">
-              <h2 className="text-lg font-semibold text-white tracking-tight">
-                {generatedScript || isLoading ? 'Generated Script' : 'User Guide'}
-              </h2>
-              <p className="text-sm text-brand-gray-400 mt-0.5">
-                {generatedScript || isLoading ? 'ExtendScript (.jsx) ready for Photoshop.' : 'How to use the Script Generator.'}
-              </p>
+              <h2 className="text-lg font-semibold text-white tracking-tight">User Guide</h2>
+              <p className="text-sm text-brand-gray-400 mt-0.5">How to use the Script Generator.</p>
             </div>
 
             <div className="px-6 py-5 flex flex-col flex-1 gap-4">
-              <div className="flex-1">
-                {generatedScript || isLoading ? (
-                  <CodeBlock script={generatedScript} isLoading={isLoading} loadingMessage={loadingMessage} />
-                ) : (
-                  <UserGuide />
-                )}
-              </div>
 
-              {generatedScript && !isLoading && (
-                <button
-                  onClick={handleDownloadScript}
-                  className="w-full flex items-center justify-center gap-2 bg-brand-gray-700/60 hover:bg-brand-gray-700 text-brand-gray-200 hover:text-white font-medium py-3 px-4 rounded-xl border border-brand-gray-600/40 hover:border-brand-gray-500/70 transition-all duration-150 active:scale-[0.98] text-sm hover:-translate-y-px hover:shadow-lg hover:shadow-black/20"
-                >
-                  <DownloadIcon className="w-4 h-4" />
-                  Download .jsx file
-                </button>
+              {/* Loading state — inline at top while generating */}
+              {isLoading && (
+                <div className="flex items-center gap-3 bg-indigo-500/10 border border-indigo-500/30 rounded-xl px-4 py-3">
+                  <div className="w-4 h-4 rounded-full border-2 border-indigo-400/30 border-t-indigo-400 animate-spin flex-shrink-0" />
+                  <p className="text-sm text-indigo-200">{loadingMessage ?? 'Generating script…'}</p>
+                </div>
               )}
+
+              {/* Generated script — collapsible, user opts in */}
+              {generatedScript && !isLoading && (
+                <div className="border border-emerald-500/30 bg-emerald-500/5 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setIsScriptExpanded(v => !v)}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-emerald-500/10 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      </div>
+                      <div className="text-left min-w-0">
+                        <p className="text-sm font-semibold text-emerald-200">Script ready</p>
+                        <p className="text-xs text-emerald-300/70 truncate">
+                          {isScriptExpanded ? 'Hide preview' : 'Click to preview the generated code'}
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronDownIcon className={`w-4 h-4 text-emerald-300/70 flex-shrink-0 transition-transform duration-200 ${isScriptExpanded ? '' : '-rotate-90'}`} />
+                  </button>
+                  <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isScriptExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                    <div className="overflow-hidden">
+                      <div className="px-3 pb-3">
+                        <CodeBlock script={generatedScript} isLoading={false} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex-1">
+                <UserGuide />
+              </div>
             </div>
           </div>
         </div>
