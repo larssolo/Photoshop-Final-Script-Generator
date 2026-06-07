@@ -1,7 +1,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ConditionAction, TrimAction, FlattenAction, MetadataAction } from './types';
-import { generateScriptPrompt, parseScriptToActions } from './services/aiService';
+import { generateScriptPrompt, parseScriptToActions, fetchCredits, startCheckout, NeedCreditsError } from './services/aiService';
 import Header from './components/Header';
 import ActionStep from './components/ActionStep';
 import ResizeModal from './components/modals/ResizeModal';
@@ -75,8 +75,13 @@ const App: React.FC = () => {
     try {
       const script = await generateScriptPrompt(actions, outputFolderName);
       dispatch({ type: 'SET_GENERATED_SCRIPT', payload: script });
+      fetchCredits().then(setCredits);
     } catch (e) {
-      dispatch({ type: 'SET_ERROR', payload: e instanceof Error ? e.message : 'An error occurred. Please try again.' });
+      if (e instanceof NeedCreditsError) {
+        setShowPaywall(true);
+      } else {
+        dispatch({ type: 'SET_ERROR', payload: e instanceof Error ? e.message : 'An error occurred. Please try again.' });
+      }
     } finally {
       dispatch({ type: 'SET_LOADING', payload: { isLoading: false } });
     }
@@ -86,6 +91,10 @@ const App: React.FC = () => {
   const [dropIndicator, setDropIndicator] = useState<{ id: string; position: 'before' | 'after' | 'inside' } | null>(null);
   const [isScriptExpanded, setIsScriptExpanded] = useState(false);
   const [showDownloadOverlay, setShowDownloadOverlay] = useState(false);
+  const [credits, setCredits] = useState<number | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paidToast, setPaidToast] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
 
   useEffect(() => {
     if (generatedScript) {
@@ -93,6 +102,36 @@ const App: React.FC = () => {
       setShowDownloadOverlay(true);
     }
   }, [generatedScript]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('paid')) {
+      setPaidToast(true);
+      history.replaceState(null, '', window.location.pathname);
+      fetchCredits().then(setCredits);
+    } else if (params.has('canceled')) {
+      history.replaceState(null, '', window.location.pathname);
+      fetchCredits().then(setCredits);
+    } else {
+      fetchCredits().then(setCredits);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!paidToast) return;
+    const t = setTimeout(() => setPaidToast(false), 4000);
+    return () => clearTimeout(t);
+  }, [paidToast]);
+
+  const handleBuyCredits = async () => {
+    setCheckingOut(true);
+    try {
+      await startCheckout();
+    } catch (e) {
+      setCheckingOut(false);
+      dispatch({ type: 'SET_ERROR', payload: e instanceof Error ? e.message : 'Checkout failed. Please try again.' });
+    }
+  };
 
   const isContainerType = (type: ActionType) =>
     type === ActionType.CONDITION || type === ActionType.CREATE_FOLDER || type === ActionType.TRIM;
@@ -174,8 +213,13 @@ const App: React.FC = () => {
       try {
         const parsedData = await parseScriptToActions(content);
         dispatch({ type: 'LOAD_IMPORTED_DATA', payload: { actions: parsedData.actions, outputFolderName: parsedData.outputFolderName, script: content } });
+        fetchCredits().then(setCredits);
       } catch (err) {
-        dispatch({ type: 'SET_ERROR', payload: err instanceof Error ? err.message : 'Import failed. Please try again.' });
+        if (err instanceof NeedCreditsError) {
+          setShowPaywall(true);
+        } else {
+          dispatch({ type: 'SET_ERROR', payload: err instanceof Error ? err.message : 'Import failed. Please try again.' });
+        }
       } finally {
         dispatch({ type: 'SET_LOADING', payload: { isLoading: false } });
       }
@@ -221,7 +265,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-brand-dark font-sans">
-      <Header onImportClick={() => importScriptRef.current?.click()} />
+      <Header onImportClick={() => importScriptRef.current?.click()} credits={credits} onBuyCredits={() => setShowPaywall(true)} />
 
       <main className="container mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
         <input type="file" ref={importScriptRef} onChange={handleImportScript} accept=".jsx" className="hidden" />
@@ -470,6 +514,60 @@ const App: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Paywall modal ───────────────────────────────────────────────── */}
+      {showPaywall && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setShowPaywall(false)}
+        >
+          <div
+            className="relative bg-brand-gray-900 border border-brand-gray-700/60 rounded-2xl shadow-2xl shadow-black/60 p-8 max-w-sm w-full mx-4 flex flex-col items-center gap-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-14 h-14 rounded-2xl bg-indigo-500/15 flex items-center justify-center">
+              <SparklesIcon className="w-7 h-7 text-indigo-400" />
+            </div>
+            <div className="text-center">
+              <h2 className="text-lg font-bold text-white mb-1">Out of credits</h2>
+              <p className="text-sm text-brand-gray-400 leading-relaxed">
+                You've used all your script generations.<br />
+                Buy 4 more for just $2.
+              </p>
+            </div>
+            <button
+              onClick={handleBuyCredits}
+              disabled={checkingOut}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-60 disabled:cursor-wait text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-indigo-900/50 transition-all duration-200 active:scale-[0.98]"
+            >
+              {checkingOut ? (
+                <>
+                  <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  Redirecting…
+                </>
+              ) : (
+                'Buy 4 scripts – $2'
+              )}
+            </button>
+            <button
+              onClick={() => setShowPaywall(false)}
+              className="text-sm text-brand-gray-500 hover:text-brand-gray-300 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Paid toast ──────────────────────────────────────────────────── */}
+      {paidToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 bg-emerald-600 text-white text-sm font-medium px-5 py-3 rounded-full shadow-xl shadow-emerald-900/60 animate-pulse-subtle">
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+          Payment successful — 4 credits added!
         </div>
       )}
 
