@@ -532,8 +532,8 @@ ${buildScriptCleanupSection()}
 
   try {
     const stream = getClient().messages.stream({
-      model: 'claude-opus-4-7',
-      max_tokens: 32000,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 16000,
       messages: [{ role: 'user', content: fullPrompt }],
     });
     const response = await stream.finalMessage();
@@ -743,7 +743,7 @@ export async function parseScriptToActions(scriptContent: string): Promise<{ out
 
   try {
     const response = await getClient().messages.create({
-      model: 'claude-opus-4-7',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 8192,
       tools: [{
         name: 'extract_script_actions',
