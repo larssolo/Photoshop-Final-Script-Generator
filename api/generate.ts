@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { generateScriptPrompt } from './_lib/scriptAI';
-import { trySpend, refund, getCredits, isValidToken } from './_lib/credits';
+import { generateScriptPrompt } from './_lib/scriptAI.js';
+import { trySpend, refund, getCredits, isValidToken } from './_lib/credits.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {

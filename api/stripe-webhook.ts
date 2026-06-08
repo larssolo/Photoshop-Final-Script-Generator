@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Stripe from 'stripe';
-import { addCredits, isValidToken } from './_lib/credits';
+import { addCredits, isValidToken } from './_lib/credits.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '');
 

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getCredits, isValidToken } from './_lib/credits';
+import { getCredits, isValidToken } from './_lib/credits.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = req.query.token;
