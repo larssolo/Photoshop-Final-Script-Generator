@@ -63,7 +63,7 @@ const Header: React.FC<HeaderProps> = ({ onImportClick, credits, onBuyCredits, u
                 onClick={onSignOut}
                 className="flex items-center gap-1.5 bg-brand-gray-800/60 hover:bg-brand-gray-700 text-brand-gray-400 hover:text-white font-medium py-2 px-3 rounded-xl border border-brand-gray-700/50 transition-all duration-150 active:scale-95 text-xs"
               >
-                Log ud
+                Sign out
               </button>
 
               {/* Import */}
@@ -81,7 +81,7 @@ const Header: React.FC<HeaderProps> = ({ onImportClick, credits, onBuyCredits, u
               onClick={onSignIn}
               className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-semibold py-2 px-4 rounded-xl shadow-lg shadow-indigo-900/40 transition-all duration-150 active:scale-95 text-sm"
             >
-              Log ind
+              Sign in
             </button>
           )}
         </div>
