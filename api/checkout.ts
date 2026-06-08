@@ -21,8 +21,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{ price: process.env.STRIPE_PRICE_ID ?? '', quantity: 1 }],
-      // The device token travels with the payment so the webhook knows whom to credit.
       metadata: { token },
+      invoice_creation: { enabled: true },
       success_url: `${origin}/?paid=1`,
       cancel_url: `${origin}/?canceled=1`,
       automatic_tax: { enabled: false },
