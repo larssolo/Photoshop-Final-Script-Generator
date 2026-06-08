@@ -1,7 +1,8 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { User } from '@supabase/supabase-js';
 import { Action, ActionType, ResizeAction, SaveAction, CreateFolderAction, RotateAction, ColorModeAction, ConditionAction, TrimAction, FlattenAction, MetadataAction } from './types';
-import { generateScriptPrompt, parseScriptToActions, fetchCredits, startCheckout, NeedCreditsError } from './services/aiService';
+import { generateScriptPrompt, parseScriptToActions, fetchCredits, startCheckout, NeedCreditsError, signInWithEmail, signOut, onAuthStateChange } from './services/aiService';
 import Header from './components/Header';
 import ActionStep from './components/ActionStep';
 import ResizeModal from './components/modals/ResizeModal';
@@ -62,6 +63,7 @@ const App: React.FC = () => {
   const handleDeleteAction = (id: string) => dispatch({ type: 'DELETE_ACTION', payload: id });
 
   const handleGenerateScript = useCallback(async () => {
+    if (!user) { setShowLoginModal(true); return; }
     if (actions.length === 0) {
       dispatch({ type: 'SET_ERROR', payload: 'Add at least one step before generating.' });
       return;
@@ -95,6 +97,13 @@ const App: React.FC = () => {
   const [showPaywall, setShowPaywall] = useState(false);
   const [paidToast, setPaidToast] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginSent, setLoginSent] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
 
   useEffect(() => {
     if (generatedScript) {
@@ -104,17 +113,23 @@ const App: React.FC = () => {
   }, [generatedScript]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.has('paid')) {
-      setPaidToast(true);
-      history.replaceState(null, '', window.location.pathname);
-      fetchCredits().then(setCredits);
-    } else if (params.has('canceled')) {
-      history.replaceState(null, '', window.location.pathname);
-      fetchCredits().then(setCredits);
-    } else {
-      fetchCredits().then(setCredits);
-    }
+    const subscription = onAuthStateChange((u) => {
+      setUser(u);
+      setAuthLoading(false);
+      if (u) {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('paid')) {
+          setPaidToast(true);
+          history.replaceState(null, '', window.location.pathname);
+        } else if (params.has('canceled')) {
+          history.replaceState(null, '', window.location.pathname);
+        }
+        fetchCredits().then(setCredits);
+      } else {
+        setCredits(null);
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -131,6 +146,27 @@ const App: React.FC = () => {
       setCheckingOut(false);
       dispatch({ type: 'SET_ERROR', payload: e instanceof Error ? e.message : 'Checkout failed. Please try again.' });
     }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail.trim()) return;
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      await signInWithEmail(loginEmail.trim());
+      setLoginSent(true);
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : 'Could not send login link.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    setCredits(null);
+    setUser(null);
   };
 
   const isContainerType = (type: ActionType) =>
@@ -203,6 +239,7 @@ const App: React.FC = () => {
   };
 
   const handleImportScript = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user) { setShowLoginModal(true); return; }
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -265,7 +302,14 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-brand-dark font-sans">
-      <Header onImportClick={() => importScriptRef.current?.click()} credits={credits} onBuyCredits={() => setShowPaywall(true)} />
+      <Header
+        onImportClick={() => importScriptRef.current?.click()}
+        credits={credits}
+        onBuyCredits={() => setShowPaywall(true)}
+        user={user}
+        onSignIn={() => { setShowLoginModal(true); setLoginSent(false); setLoginEmail(''); setLoginError(''); }}
+        onSignOut={handleSignOut}
+      />
 
       <main className="container mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
         <input type="file" ref={importScriptRef} onChange={handleImportScript} accept=".jsx" className="hidden" />
@@ -513,6 +557,85 @@ const App: React.FC = () => {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Login modal ─────────────────────────────────────────────────── */}
+      {showLoginModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setShowLoginModal(false)}
+        >
+          <div
+            className="relative bg-brand-gray-900 border border-brand-gray-700/60 rounded-2xl shadow-2xl shadow-black/60 p-8 max-w-sm w-full mx-4 flex flex-col gap-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-brand-blue/15 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-brand-blue" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white">Log ind</h2>
+                <p className="text-xs text-brand-gray-400">Dine credits gemmes på din konto</p>
+              </div>
+            </div>
+
+            {!loginSent ? (
+              <form onSubmit={handleLogin} className="flex flex-col gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-brand-gray-400 uppercase tracking-wider mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="din@email.dk"
+                    required
+                    autoFocus
+                    className="w-full bg-brand-gray-800 border border-brand-gray-700/60 rounded-xl px-4 py-2.5 text-white text-sm placeholder:text-brand-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-blue/40 focus:border-brand-blue/60 transition-all"
+                  />
+                </div>
+                {loginError && (
+                  <p className="text-xs text-red-400">{loginError}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={loginLoading || !loginEmail.trim()}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 disabled:cursor-wait text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 active:scale-[0.98]"
+                >
+                  {loginLoading ? (
+                    <><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Sender…</>
+                  ) : 'Send login-link'}
+                </button>
+                <p className="text-xs text-brand-gray-500 text-center">
+                  Vi sender dig et link — intet password nødvendigt
+                </p>
+              </form>
+            ) : (
+              <div className="flex flex-col items-center gap-3 py-2">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/15 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-emerald-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold text-white">Tjek din email</p>
+                <p className="text-xs text-brand-gray-400 text-center">
+                  Vi har sendt et login-link til <span className="text-white">{loginEmail}</span>.<br />
+                  Klik på linket for at logge ind.
+                </p>
+              </div>
+            )}
+
+            <button
+              onClick={() => setShowLoginModal(false)}
+              className="text-sm text-brand-gray-500 hover:text-brand-gray-300 transition-colors text-center"
+            >
+              Luk
+            </button>
           </div>
         </div>
       )}

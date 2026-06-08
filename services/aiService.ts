@@ -1,20 +1,10 @@
+import { createClient, User } from '@supabase/supabase-js';
 import { Action } from '../types';
 
-/**
- * All AI work now happens on the server (see /api/*). The browser only holds an
- * anonymous "device token" used to track purchased credits — never the API key.
- */
-
-const TOKEN_KEY = 'ps_device_token';
-
-export function getDeviceToken(): string {
-  let token = localStorage.getItem(TOKEN_KEY);
-  if (!token) {
-    token = crypto.randomUUID();
-    localStorage.setItem(TOKEN_KEY, token);
-  }
-  return token;
-}
+export const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL as string,
+  import.meta.env.VITE_SUPABASE_ANON_KEY as string
+);
 
 /** Thrown when the user has run out of credits and must purchase more. */
 export class NeedCreditsError extends Error {
@@ -24,60 +14,79 @@ export class NeedCreditsError extends Error {
   }
 }
 
+/** Send a magic-link email. Supabase handles delivery. */
+export async function signInWithEmail(email: string): Promise<void> {
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: window.location.origin },
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function signOut(): Promise<void> {
+  await supabase.auth.signOut();
+}
+
+export function onAuthStateChange(callback: (user: User | null) => void) {
+  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    callback(session?.user ?? null);
+  });
+  return data.subscription;
+}
+
+async function getAccessToken(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('NOT_AUTHENTICATED');
+  return token;
+}
+
 async function postJson(url: string, body: unknown): Promise<any> {
+  const token = await getAccessToken();
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
     body: JSON.stringify(body),
   });
 
-  if (res.status === 402) {
-    throw new NeedCreditsError();
-  }
+  if (res.status === 402) throw new NeedCreditsError();
 
   let data: any = null;
-  try {
-    data = await res.json();
-  } catch {
-    /* non-JSON response */
-  }
+  try { data = await res.json(); } catch { /* non-JSON */ }
 
-  if (!res.ok) {
-    throw new Error(data?.error || 'Request failed. Please try again.');
-  }
+  if (!res.ok) throw new Error(data?.error || 'Request failed. Please try again.');
   return data;
 }
 
 export async function generateScriptPrompt(actions: Action[], outputFolderName: string): Promise<string> {
-  const data = await postJson('/api/generate', {
-    token: getDeviceToken(),
-    actions,
-    outputFolderName,
-  });
+  const data = await postJson('/api/generate', { actions, outputFolderName });
   return data.script as string;
 }
 
 export async function parseScriptToActions(
   scriptContent: string
 ): Promise<{ outputFolderName: string; actions: Action[] }> {
-  const data = await postJson('/api/parse', {
-    token: getDeviceToken(),
-    scriptContent,
-  });
+  const data = await postJson('/api/parse', { scriptContent });
   return { outputFolderName: data.outputFolderName, actions: data.actions };
 }
 
-/** Current credit balance for this device. */
 export async function fetchCredits(): Promise<number> {
-  const res = await fetch(`/api/credits?token=${encodeURIComponent(getDeviceToken())}`);
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return 0;
+  const res = await fetch('/api/credits', {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
   if (!res.ok) return 0;
-  const data = await res.json();
-  return typeof data.credits === 'number' ? data.credits : 0;
+  const json = await res.json();
+  return typeof json.credits === 'number' ? json.credits : 0;
 }
 
-/** Start Stripe Checkout — redirects the browser to Stripe's hosted page. */
 export async function startCheckout(): Promise<void> {
-  const data = await postJson('/api/checkout', { token: getDeviceToken() });
+  const data = await postJson('/api/checkout', {});
   if (data.url) {
     window.location.href = data.url;
   } else {

@@ -5,31 +5,40 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function getCredits(token: string): Promise<number> {
+/** Verify a Bearer JWT and return the Supabase user ID, or null if invalid. */
+export async function getUserIdFromBearer(authHeader: string | undefined): Promise<string | null> {
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  const jwt = authHeader.slice(7);
+  const { data, error } = await supabase.auth.getUser(jwt);
+  if (error || !data.user) return null;
+  return data.user.id;
+}
+
+export async function getCredits(userId: string): Promise<number> {
   const { data } = await supabase
     .from('credits')
     .select('balance')
-    .eq('token', token)
+    .eq('token', userId)
     .single();
   return typeof data?.balance === 'number' && data.balance > 0 ? data.balance : 0;
 }
 
-export async function trySpend(token: string): Promise<{ ok: boolean; remaining: number }> {
-  // Atomic: only decrements if balance > 0, returns new balance
-  const { data } = await supabase.rpc('spend_credit', { p_token: token });
+export async function trySpend(userId: string): Promise<{ ok: boolean; remaining: number }> {
+  const { data } = await supabase.rpc('spend_credit', { p_token: userId });
   if (data === null || data < 0) return { ok: false, remaining: 0 };
   return { ok: true, remaining: data as number };
 }
 
-export async function refund(token: string): Promise<void> {
-  await supabase.rpc('add_credits', { p_token: token, p_amount: 1 });
+export async function refund(userId: string): Promise<void> {
+  await supabase.rpc('add_credits', { p_token: userId, p_amount: 1 });
 }
 
-export async function addCredits(token: string, amount: number): Promise<number> {
-  const { data } = await supabase.rpc('add_credits', { p_token: token, p_amount: amount });
+export async function addCredits(userId: string, amount: number): Promise<number> {
+  const { data } = await supabase.rpc('add_credits', { p_token: userId, p_amount: amount });
   return typeof data === 'number' ? data : 0;
 }
 
+/** Used only by stripe-webhook where we trust the metadata token from Stripe. */
 export function isValidToken(token: unknown): token is string {
   return typeof token === 'string' && token.length >= 16 && token.length <= 100;
 }
