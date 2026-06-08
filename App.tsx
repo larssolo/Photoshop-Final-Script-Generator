@@ -578,8 +578,8 @@ const App: React.FC = () => {
                 </svg>
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">Log ind</h2>
-                <p className="text-xs text-brand-gray-400">Dine credits gemmes på din konto</p>
+                <h2 className="text-base font-bold text-white">Sign in</h2>
+                <p className="text-xs text-brand-gray-400">Your credits are saved to your account</p>
               </div>
             </div>
 
@@ -608,11 +608,11 @@ const App: React.FC = () => {
                   className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 disabled:cursor-wait text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 active:scale-[0.98]"
                 >
                   {loginLoading ? (
-                    <><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Sender…</>
-                  ) : 'Send login-link'}
+                    <><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Sending…</>
+                  ) : 'Send login link'}
                 </button>
                 <p className="text-xs text-brand-gray-500 text-center">
-                  Vi sender dig et link — intet password nødvendigt
+                  We'll send you a link — no password needed
                 </p>
               </form>
             ) : (
@@ -622,10 +622,10 @@ const App: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
                   </svg>
                 </div>
-                <p className="text-sm font-semibold text-white">Tjek din email</p>
+                <p className="text-sm font-semibold text-white">Check your email</p>
                 <p className="text-xs text-brand-gray-400 text-center">
-                  Vi har sendt et login-link til <span className="text-white">{loginEmail}</span>.<br />
-                  Klik på linket for at logge ind.
+                  We've sent a login link to <span className="text-white">{loginEmail}</span>.<br />
+                  Click the link to sign in.
                 </p>
               </div>
             )}
@@ -634,7 +634,7 @@ const App: React.FC = () => {
               onClick={() => setShowLoginModal(false)}
               className="text-sm text-brand-gray-500 hover:text-brand-gray-300 transition-colors text-center"
             >
-              Luk
+              Close
             </button>
           </div>
         </div>
