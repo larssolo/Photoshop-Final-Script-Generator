@@ -9,8 +9,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const userId = await getUserIdFromBearer(req.headers.authorization);
-  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+  const user = await getUserIdFromBearer(req.headers.authorization);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
 
   const origin =
     (req.headers.origin as string) ||
@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{ price: process.env.STRIPE_PRICE_ID ?? '', quantity: 1 }],
-      metadata: { token: userId },
+      metadata: { token: user.id },
       invoice_creation: { enabled: true },
       success_url: `${origin}/?paid=1`,
       cancel_url: `${origin}/?canceled=1`,

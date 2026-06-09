@@ -5,13 +5,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-/** Verify a Bearer JWT and return the Supabase user ID, or null if invalid. */
-export async function getUserIdFromBearer(authHeader: string | undefined): Promise<string | null> {
+/** Verify a Bearer JWT and return the user's id + email, or null if invalid. */
+export async function getUserIdFromBearer(authHeader: string | undefined): Promise<{ id: string; email: string } | null> {
   if (!authHeader?.startsWith('Bearer ')) return null;
   const jwt = authHeader.slice(7);
   const { data, error } = await supabase.auth.getUser(jwt);
   if (error || !data.user) return null;
-  return data.user.id;
+  return { id: data.user.id, email: data.user.email ?? '' };
 }
 
 export async function getCredits(userId: string): Promise<number> {
